@@ -1,0 +1,88 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Cordis 2.0 Architecture & Next-Phase Execution Pipeline",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "prosecution-pipeline",
+        "label": "CI/CD Prosecution Pipeline",
+        "focus": ["coding_agent", "agent_pr", "forge_guard", "gate1_anchor", "gate2_mutant", "gate3_fuzz", "merge_pass"],
+        "note": "Deterministic progression from agent PR submission to unbribable merge gate."
+      },
+      {
+        "id": "pre-commit-mcp",
+        "label": "Pre-PR Agent MCP Loop",
+        "focus": ["coding_agent", "cordis_mcp", "agent_pr"],
+        "note": "Shift-left verification catching hollow tests in the agent's inner development loop."
+      },
+      {
+        "id": "counterfeit-recovery",
+        "label": "Counterfeit Red & Auto-Synthesis",
+        "focus": ["gate2_mutant", "auto_synth", "blocked_pr", "coding_agent"],
+        "note": "How surviving mutants trigger forensic blocks and automated invariant repair."
+      }
+    ],
+    "output": "cordis_roadmap.html"
+  },
+  "lanes": [
+    { "id": "agent", "label": "AI Agent & Repository" },
+    { "id": "mcp", "label": "Pre-PR Inner Loop (MCP)" },
+    { "id": "prosecutor", "label": "Cordis CI/CD Prosecutor" },
+    { "id": "remedy", "label": "Forensic Report & Auto-Repair", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "local", "label": "Agent Generation", "fromCol": 0, "toCol": 1 },
+    { "id": "tamper", "label": "Identity & AST Audit", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "execution", "label": "Mutation & Property Fuzzing", "fromCol": 4, "toCol": 5, "variant": "security" }
+  ],
+  "groups": [
+    { "id": "gate_pipeline", "label": "Adversarial CI Gates", "lane": "prosecutor", "fromCol": 2, "toCol": 5, "variant": "security" },
+    { "id": "repair_loop", "label": "Counterfeit Red Resolution", "lane": "remedy", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["coding_agent", "cordis_mcp", "agent_pr", "forge_guard", "gate1_anchor", "gate2_mutant", "gate3_fuzz", "merge_pass"],
+  "nodes": [
+    { "id": "coding_agent", "lane": "agent", "col": 0, "type": "external", "label": "AI Coding Agent", "sublabel": "Devin / Claude", "width": 130 },
+    { "id": "cordis_mcp", "lane": "mcp", "col": 0, "type": "messagebus", "label": "Cordis MCP Hook", "sublabel": "local diff check", "width": 130 },
+    { "id": "agent_pr", "lane": "agent", "col": 1, "type": "frontend", "label": "Pull Request Diff", "sublabel": "code + tests", "width": 130 },
+    { "id": "forge_guard", "lane": "prosecutor", "col": 2, "type": "security", "label": "Gate 0: ForgeGuard", "sublabel": "review audit", "width": 130 },
+    { "id": "gate1_anchor", "lane": "prosecutor", "col": 3, "type": "security", "label": "Gate 1: AST Anchor", "sublabel": "mock & hash audit", "width": 130 },
+    { "id": "gate2_mutant", "lane": "prosecutor", "col": 4, "type": "backend", "label": "Gate 2: AST Mutation", "sublabel": "mutant killer", "width": 136 },
+    { "id": "gate3_fuzz", "lane": "prosecutor", "col": 5, "type": "backend", "label": "Gate 3: Fuzzer", "sublabel": "200 edge cases", "width": 130 },
+    { "id": "merge_pass", "lane": "agent", "col": 5, "type": "database", "label": "Verified Merge", "sublabel": "landing approval", "width": 130 },
+    { "id": "auto_synth", "lane": "remedy", "col": 4, "type": "cloud", "label": "Invariant Synthesis", "sublabel": "auto-repair patch", "width": 136 },
+    { "id": "blocked_pr", "lane": "remedy", "col": 5, "type": "security", "label": "Counterfeit Block", "sublabel": "forensic report", "width": 130 }
+  ],
+  "edges": [
+    { "id": "agent-local-hook", "from": "coding_agent", "to": "cordis_mcp", "label": "pre-commit", "variant": "emphasis" },
+    { "id": "mcp-pass-pr", "from": "cordis_mcp", "to": "agent_pr", "label": "verified diff", "variant": "default" },
+    { "id": "pr-forge-check", "from": "agent_pr", "to": "forge_guard", "label": "inspect review", "variant": "security" },
+    { "id": "forge-to-gate1", "from": "forge_guard", "to": "gate1_anchor", "label": "authorized", "variant": "default" },
+    { "id": "gate1-to-gate2", "from": "gate1_anchor", "to": "gate2_mutant", "label": "no test tampering", "variant": "emphasis" },
+    { "id": "gate2-to-gate3", "from": "gate2_mutant", "to": "gate3_fuzz", "label": "100% killed", "variant": "emphasis" },
+    { "id": "gate3-to-merge", "from": "gate3_fuzz", "to": "merge_pass", "label": "clean invariants", "variant": "emphasis" },
+    { "id": "gate2-survived", "from": "gate2_mutant", "to": "auto_synth", "label": "surviving mutant", "variant": "security", "role": "error" },
+    { "id": "synth-to-block", "from": "auto_synth", "to": "blocked_pr", "label": "attach diff patch", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Deterministic CI/CD Prosecution",
+      "items": [
+        "Diff-scoped AST mutations run in <3.5s without whole-repo overhead",
+        "BLAKE2b AST anchors catch weakened asserts and hollow mocks instantly"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Shift-Left & Active Auto-Repair",
+      "items": [
+        "Cordis MCP hook prevents agents from authoring hollow tests locally",
+        "Synthesizer emits verified diff patches killing 100% of surviving mutants"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+name: Cordis Adversarial AI-PR Prosecutor
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  prosecute:
+    name: Cordis 3-Gate Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Required for diff extraction against HEAD~1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Unit Test Suite
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Run Cordis Invariant Prosecutor
+        run: |
+          python -m cordis.cli verify-git --base-ref HEAD~1 --github-comment --output-html cordis_report.html --output-md cordis_report.md
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+
+      - name: Write Verdict to Job Summary
+        if: always()
+        run: |
+          if [ -f cordis_report.md ]; then
+            cat cordis_report.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### 🛡️ Cordis Prosecutor: Verification Completed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Post Cordis Verdict PR Comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('cordis_report.md')) {
+              const body = fs.readFileSync('cordis_report.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+      - name: Upload Visual Scorecard Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cordis-prosecutor-scorecard
+          path: cordis_report.html
