@@ -621,6 +621,8 @@ def format_ai_audit_markdown(
     weak_assert_pct = (total_g1_weak / total_g1_asserts * 100) if total_g1_asserts > 0 else 0.0
     survival_rate_pct = (total_survived / total_mutants * 100) if total_mutants > 0 else 0.0
 
+    survival_mult = (survival_rate_pct / 15.0) if survival_rate_pct > 0 else 1.0
+
     lines.extend([
         "",
         f"**Gate 2 Aggregates**: **`{total_mutants}` AST mutants tested** across 10 production functions · "
@@ -631,7 +633,7 @@ def format_ai_audit_markdown(
         "| :--- | :--- | :--- | :--- |",
         f"| **Mock Density** | **0.0% - 1.2%**<br>_Human maintainers test pure algorithmic transformations with real inputs_ | **{mock_density_pct:.1f}%** (`{total_g1_mocks}` mocks across {len(g1_findings)} test files)<br>_Agents isolate dependencies with `@patch` to force exit code 0_ | Coding agents aggressively mock out runtime modules to avoid dealing with side effects, creating hollow tests that pass even when dependencies break. |",
         f"| **Weak `is not None` Asserts** | **0.8%** (`3` of `380` assertions in tested files) | **{weak_assert_pct:.1f}%** (`{total_g1_weak}` of `{total_g1_asserts:,}` assertions in tested files)<br>_Up to 23.5% in `test_tokens.py`!_ | The **Counterfeit Red Trap**: agents satisfy test requirements by checking non-nullity (`assert res is not None`) rather than asserting mathematical or behavioral correctness. |",
-        f"| **AST Mutant Survival Rate** | **15.0%** (`6` surviving mutants across 10 functions) | **{survival_rate_pct:.1f}%** (`{total_survived}` surviving mutants across {len(g2_findings)} functions)<br>_More than 2.5× higher mutant survival!_ | Production AI codebases contain massive untested branches and early return invariants that exit `0` under mutation testing. |",
+        f"| **AST Mutant Survival Rate** | **15.0%** (`6` surviving mutants across 10 functions) | **{survival_rate_pct:.1f}%** (`{total_survived}` surviving mutants across {len(g2_findings)} functions)<br>_{survival_mult:.1f}× higher mutant survival!_ | Production AI codebases contain massive untested branches and early return invariants that exit `0` under mutation testing. |",
         "| **Commit Attribution** | 100% human signed maintainers (`theskumar`, `mahmoud`, `mitsuhiko`) | **43.3% - 80.0%** commits carry `Co-Authored-By: Claude` or bot author | AI-authored commits are now the dominant code contributor in viral MCP and agent repositories. |",
         "| **FixProof / `git revert` Efficacy** | Completely fooled by single-input overfits | Completely fooled by mocked passes and hollow assertions | Naive `git revert` verification cannot distinguish between genuine invariant fixes and hollow mocked passes. |",
         "",
