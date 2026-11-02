@@ -145,7 +145,7 @@ GATE1_TARGETS: List[Gate1TestTarget] = [
     Gate1TestTarget(
         repo_name="smolagents",
         test_file="tests/test_remote_executors.py",
-        description="Remote sandbox & WASM executor test suite (89 mocks isolating sandbox execution)",
+        description="Remote sandbox & WASM executor test suite (60 mocks isolating sandbox execution)",
     ),
     Gate1TestTarget(
         repo_name="smolagents",
@@ -156,17 +156,17 @@ GATE1_TARGETS: List[Gate1TestTarget] = [
     Gate1TestTarget(
         repo_name="nao-mgs-workflow",
         test_file="bin/test_run_nf_test_parallel.py",
-        description="Nextflow parallel test worker harness suite (77 mocks simulating process workers)",
+        description="Nextflow parallel test worker harness suite (38 mocks simulating process workers)",
     ),
     Gate1TestTarget(
         repo_name="nao-mgs-workflow",
         test_file="bin/test_download_db.py",
-        description="S3 & local database synchronization test suite (41 mocks isolating storage APIs)",
+        description="S3 & local database synchronization test suite (22 mocks isolating storage APIs)",
     ),
     Gate1TestTarget(
         repo_name="nao-mgs-workflow",
         test_file="bin/test_check_nextflow_version.py",
-        description="Semver pinning & GitHub releases check suite (29 mocks isolating network & fs)",
+        description="Semver pinning & GitHub releases check suite (20 mocks isolating network & fs)",
     ),
 ]
 
@@ -603,7 +603,7 @@ def format_ai_audit_markdown(
         status_str = f"🛑 **{surv_cnt} Survived**" if surv_cnt > 0 else "✅ 0 (100% Killed)"
 
         if f.surviving_mutants:
-            mut_items = [f"• Line {m.lineno}: `{m.description}`" for m in f.surviving_mutants]
+            mut_items = [f"• Line {m.lineno}: {m.description}" for m in f.surviving_mutants]
             mut_str = "<br>".join(mut_items)
             diag_str = f"Hollow tests in `{Path(t.test_file).name}` exit 0 without asserting function return invariants."
         else:
@@ -639,7 +639,7 @@ def format_ai_audit_markdown(
         "",
         "### Key Forensic Takeaways from AI-Agent & MCP Repository Audit:",
         "1. **The 'Counterfeit Red' Trap is Epidemic in AI Repositories**: Coding agents writing unit tests optimize for test runner exit code `0`. In `fastmcp/tests/server/auth/oauth_proxy/test_tokens.py`, 31 separate assertions simply check `assert token is not None` with zero verification of token claims or expiration.",
-        "2. **Massive Over-Mocking Masks Broken Logic**: In `nao-mgs-workflow`, unit test suites like `bin/test_run_nf_test_parallel.py` execute 77 `@patch` calls on a 55-assertion file. The test runs against Python mocks, not the real filesystem or worker processes.",
+        "2. **Massive Over-Mocking Masks Broken Logic**: In `nao-mgs-workflow`, unit test suites like `bin/test_run_nf_test_parallel.py` execute 38 @patch/MagicMock calls on a 55-assertion file (and 88 in FastMCP's test_tokens.py and test_run.py). The test runs against Python mocks, not the real filesystem or worker processes.",
         "3. **In-Place AST Mutation Catches What Linters and Type Checkers Miss**: In `smolagents/_function_type_hints_utils.py`, `_get_json_schema_type()` survived 4 out of 5 AST mutations (replacing returns with `None` and flipping `==` to `!=`). The agent-written test suite passed cleanly despite the function being completely broken.",
         "4. **FastMCP and Smolagents Mutation Blind Spots**: In `fastmcp/utilities/timeout.py::normalize_timeout_to_seconds()`, replacing return expressions with `None` survived native tests due to incomplete assertions on None return semantics. In `smolagents/_function_type_hints_utils.py`, `_get_json_schema_type()` suffered an 80.0% mutant survival rate (4 of 5 survived).",
         "5. **Cordis is the Only Defense Against Counterfeit Agent PRs**: Traditional CI runners and FixProof approve these hollow tests. Only Cordis's 3-gate adversarial prosecution catches test tampering, kills hollow tests via AST mutation, and exposes differential counterexamples.",
@@ -655,25 +655,33 @@ def append_ai_audit_to_file(file_path: Path | str, section_content: str) -> None
         return
     text = p.read_text(encoding="utf-8", errors="replace")
 
+    content_to_write = section_content
     header = "## 5. Experiment D: Wild AI-Agent & MCP Repository Audit"
-    if header in text:
-        parts = text.split(header)
+    if "### 5. Experiment D:" in text or p.name.lower() == "readme.md":
+        header = "### 5. Experiment D: Wild AI-Agent & MCP Repository Audit"
+        content_to_write = re.sub(r"^## 5\. Experiment D:.*", "### 5. Experiment D: Wild AI-Agent & MCP Repository Audit (fastmcp, smolagents, nao-mgs-workflow)", content_to_write, flags=re.MULTILINE)
+        content_to_write = re.sub(r"^### 5\.([1-5])", r"#### 5.\1", content_to_write, flags=re.MULTILINE)
+        content_to_write = re.sub(r"^### Key Forensic Takeaways from AI-Agent", "#### Key Forensic Takeaways from AI-Agent", content_to_write, flags=re.MULTILINE)
+
+    if header in text or "## 5. Experiment D:" in text or "### 5. Experiment D:" in text:
+        matched_header = header if header in text else ("## 5. Experiment D:" if "## 5. Experiment D:" in text else "### 5. Experiment D:")
+        parts = text.split(matched_header)
         pre = parts[0].rstrip()
         post = ""
         rem = parts[1]
-        for next_sec in ["\n## 6.", "\n## 📄 License", "\n---"]:
+        for next_sec in ["\n## 6.", "\n## 🥊", "\n## 📄 License", "\n---"]:
             if next_sec in rem:
                 idx = rem.index(next_sec)
                 post = rem[idx:]
                 break
-        new_text = f"{pre}\n\n{section_content}\n{post}".strip() + "\n"
+        new_text = f"{pre}\n\n{content_to_write}\n{post}".strip() + "\n"
     else:
         license_sec = "\n## 📄 License"
         if license_sec in text:
             idx = text.index(license_sec)
-            new_text = text[:idx].rstrip() + "\n\n" + section_content + "\n\n---\n" + text[idx:].lstrip()
+            new_text = text[:idx].rstrip() + "\n\n" + content_to_write + "\n\n---\n" + text[idx:].lstrip()
         else:
-            new_text = text.rstrip() + "\n\n" + section_content + "\n"
+            new_text = text.rstrip() + "\n\n" + content_to_write + "\n"
 
     p.write_text(new_text, encoding="utf-8")
     print(f"📝 Appended Experiment D findings to {p.name}")

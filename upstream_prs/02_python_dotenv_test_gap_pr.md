@@ -43,7 +43,7 @@ index 982305a..46d5693 100644
 +++ b/tests/test_parser.py
 @@ -761,3 +761,27 @@ def test_parse_stream(test_input, expected):
      result = parse_stream(io.StringIO(test_input))
- 
+
      assert list(result) == expected
 +
 +
@@ -87,4 +87,4 @@ index 982305a..46d5693 100644
 - `read()` Line 94: `Flip < to >=` (Defeated by reading within bounds)
 - `read()` Line 97: `Replace return with None` (Defeated by return value assertion)
 - `parse_key()` Line 117: `Replace return with None` (Defeated by single-quoted assertion)
-- `parse_key()` Line 118: `Flip == to !=` (Defeated by single-quoted key parsing)
+- `parse_key()` Line 118: Flip `==` to `!=` (Defeated by single-quoted key parsing)

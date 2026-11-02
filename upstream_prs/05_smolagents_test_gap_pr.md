@@ -43,7 +43,7 @@ index 4f5e6d7..8a9b0c1 100644
 --- a/tests/test_function_type_hints_utils.py
 +++ b/tests/test_function_type_hints_utils.py
 @@ -120,3 +120,24 @@ def test_get_json_schema_has_nullable():
- 
+
      assert schema["parameters"]["properties"]["a"]["nullable"] is True
      assert "nullable" not in schema["parameters"]["properties"]["b"]
 +
@@ -112,7 +112,7 @@ index 4f5e6d7..8a9b0c1 100644
 | `smolagents._function_type_hints_utils:_get_json_schema_type()` | `tests/test_function_type_hints_utils.py` | 1 Killed / 4 Survived (`80.0%` Survival) | **5 Killed / 0 Survived (`100%` Killed)** | 🛡️ **Gap Closed** |
 
 ### Specific Mutants Defeated
-- `_get_json_schema_type()` Line 417: `Replace return expression with None` (Defeated by `assert _get_json_schema_type(int) == {"type": "integer"}`)
-- `_get_json_schema_type()` Line 418: `Flip == to !=` (Defeated by testing custom class stringification against `"Image"`)
-- `_get_json_schema_type()` Line 423: `Flip == to !=` (Defeated by testing custom class stringification against `"Tensor"`)
-- `_get_json_schema_type()` Line 431: `Replace return expression with None` (Defeated by `assert fallback == {"type": "object"}`)
+- `_get_json_schema_type()` Line 417: Replace return expression with `None` (Defeated by `assert _get_json_schema_type(int) == {"type": "integer"}`)
+- `_get_json_schema_type()` Line 418: Flip `==` to `!=` (Defeated by testing custom class stringification against `"Image"`)
+- `_get_json_schema_type()` Line 423: Flip `==` to `!=` (Defeated by testing custom class stringification against `"Tensor"`)
+- `_get_json_schema_type()` Line 431: Replace return expression with `None` (Defeated by `assert fallback == {"type": "object"}`)

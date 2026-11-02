@@ -91,6 +91,6 @@ index 1c7e45a..ce2a8b9 100644
 ### Specific Mutants Defeated
 - `clamp()` Line 66: `Boundary shift < to <=` (Mutant defeated by `clamp(5, 2, 2) == 2`)
 - `clamp()` Line 66: `Flip < to >=` (Mutant defeated by `raises(ValueError)`)
-- `cardinalize()` Line 196: `Flip == to !=` (Defeated by `cardinalize("apple", 1) == "apple"`)
+- `cardinalize()` Line 196: Flip `==` to `!=` (Defeated by `cardinalize("apple", 1) == "apple"`)
 - `cardinalize()` Line 197: `Replace return with None` (Defeated by singular assertions)
 - `cardinalize()` Line 198: `Replace return with None` (Defeated by plural assertions)

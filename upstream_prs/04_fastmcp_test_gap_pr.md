@@ -55,8 +55,7 @@ index 3a1b2c4..d5e6f78 100644
 +        assert res_td is not None
 +        assert res_td == 12.0
 +        assert isinstance(res_td, float)
- 
- 
+
  class TestNormalizeTimeoutToTimedelta:
 diff --git a/tests/server/test_pagination.py b/tests/server/test_pagination.py
 index 9b8a7c6..e1f2a3b 100644
@@ -91,5 +90,5 @@ index 9b8a7c6..e1f2a3b 100644
 | `fastmcp.utilities.pagination:paginate_sequence()` | `tests/server/test_pagination.py` | 3 Killed / 1 Survived (`25.0%` Survival) | **4 Killed / 0 Survived (`100%` Killed)** | 🛡️ **Gap Closed** |
 
 ### Specific Mutants Defeated
-- `normalize_timeout_to_seconds()` Line 44: `Replace return expression with None` (Defeated by `assert isinstance(res_int, float)` and `assert res_int == 5.0`)
-- `paginate_sequence()` Line 62: `Flip >= to <` (Defeated by `test_exact_sequence_boundary_cursor()` asserting `next_cursor is not None` when `len(items) == page_size`)
+- `normalize_timeout_to_seconds()` Line 44: Replace return expression with `None` (Defeated by `assert isinstance(res_int, float)` and `assert res_int == 5.0`)
+- `paginate_sequence()` Line 62: Flip `>=` to `<` (Defeated by `test_exact_sequence_boundary_cursor()` asserting `next_cursor is not None` when `len(items) == page_size`)

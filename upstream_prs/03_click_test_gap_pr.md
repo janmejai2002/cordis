@@ -80,6 +80,6 @@ index 1825b19..c5d26b1 100644
 ### Specific Mutants Defeated
 - `_less_uses_raw_mode()` Line 545: `Flip return boolean False` (Killed by baseline test suite)
 - `_less_uses_raw_mode()` Line 535: `Flip + to -` (Killed by environment tokens check)
-- `_less_uses_raw_mode()` Line 539: `Flip == to !=` (Killed by `--raw-control-chars` check)
+- `_less_uses_raw_mode()` Line 539: Flip `==` to `!=` (Killed by `--raw-control-chars` check)
 - `_less_uses_raw_mode()` Line 540: `Flip return boolean True` (Killed by raw mode check)
 - `_less_uses_raw_mode()` Line 541: `Boundary shift > to >=` (**KILLED** by boundary guard assertion)

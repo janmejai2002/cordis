@@ -210,7 +210,7 @@ def format_wild_audit_markdown(findings: List[WildAuditFinding]) -> str:
         status_str = f"🛑 **{surv_count} Survived**" if surv_count > 0 else "✅ 0 (100% Killed)"
 
         if f.surviving_mutants:
-            mut_items = [f"• Line {m.lineno}: `{m.description}`" for m in f.surviving_mutants]
+            mut_items = [f"• Line {m.lineno}: {m.description}" for m in f.surviving_mutants]
             mut_str = "<br>".join(mut_items)
             gap_analysis = f"Tests in `{Path(t.test_file).name}` never exercise or assert this branch."
         else:
@@ -244,28 +244,32 @@ def append_wild_audit_to_file(file_path: Path | str, section_content: str) -> No
         return
     text = p.read_text(encoding="utf-8", errors="replace")
 
+    content_to_write = section_content
     header = "## 4. Experiment C: Wild Unmodified Open-Source Audit (Real Test Gaps Found)"
-    if header in text:
-        # Replace existing section
-        parts = text.split(header)
+    if "### 4. Experiment C:" in text or p.name.lower() == "readme.md":
+        header = "### 4. Experiment C: Wild Unmodified Open-Source Audit (Real Test Gaps Found)"
+        content_to_write = re.sub(r"^## 4\. Experiment C:", "### 4. Experiment C:", content_to_write, flags=re.MULTILINE)
+        content_to_write = re.sub(r"^### Key Forensic Takeaways from Wild", "#### Key Forensic Takeaways from Wild", content_to_write, flags=re.MULTILINE)
+
+    if header in text or "## 4. Experiment C:" in text or "### 4. Experiment C:" in text:
+        matched_header = header if header in text else ("## 4. Experiment C:" if "## 4. Experiment C:" in text else "### 4. Experiment C:")
+        parts = text.split(matched_header)
         pre = parts[0].rstrip()
-        # Find next section or end
         post = ""
         rem = parts[1]
-        for next_sec in ["\n## 5.", "\n## 📄 License", "\n---"]:
+        for next_sec in ["\n### 5.", "\n## 5.", "\n## 🥊", "\n## 📄 License", "\n---"]:
             if next_sec in rem:
                 idx = rem.index(next_sec)
                 post = rem[idx:]
                 break
-        new_text = f"{pre}\n\n{section_content}\n{post}".strip() + "\n"
+        new_text = f"{pre}\n\n{content_to_write}\n{post}".strip() + "\n"
     else:
-        # Append before License or at end
         license_sec = "\n## 📄 License"
         if license_sec in text:
             idx = text.index(license_sec)
-            new_text = text[:idx].rstrip() + "\n\n" + section_content + "\n\n---\n" + text[idx:].lstrip()
+            new_text = text[:idx].rstrip() + "\n\n" + content_to_write + "\n\n---\n" + text[idx:].lstrip()
         else:
-            new_text = text.rstrip() + "\n\n" + section_content + "\n"
+            new_text = text.rstrip() + "\n\n" + content_to_write + "\n"
 
     p.write_text(new_text, encoding="utf-8")
     print(f"📝 Appended Experiment C findings to {p.name}")
