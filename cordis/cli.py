@@ -262,8 +262,11 @@ def run_verify_git(
     g1_reports = []
     for test_file in diff_report.test_files:
         old_test_code = get_git_file_content(base_ref, test_file, repo_dir=repo_dir) or ""
-        p = Path(repo_dir) / test_file
-        new_test_code = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
+        if target_ref:
+            new_test_code = get_git_file_content(target_ref, test_file, repo_dir=repo_dir) or ""
+        else:
+            p = Path(repo_dir) / test_file
+            new_test_code = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
         g1 = audit_test_tampering(old_test_code, new_test_code, target_function_names=diff_report.target_function_names)
         g1_reports.append((test_file, g1))
         if not g1.passed:
@@ -273,9 +276,14 @@ def run_verify_git(
     discovered_test_files: list[str] = []
     if diff_report.test_files:
         for test_file in diff_report.test_files:
-            p = Path(repo_dir) / test_file
-            if p.is_file():
-                test_code_combined += p.read_text(encoding="utf-8", errors="replace") + "\n"
+            if target_ref:
+                t_code = get_git_file_content(target_ref, test_file, repo_dir=repo_dir)
+                if t_code:
+                    test_code_combined += t_code + "\n"
+            else:
+                p = Path(repo_dir) / test_file
+                if p.is_file():
+                    test_code_combined += p.read_text(encoding="utf-8", errors="replace") + "\n"
     else:
         # Zero modified test files: auto-discover existing test files in repo_dir
         ignored_dirs = {".git", ".venv", "venv", "node_modules", "build", "dist", "__pycache__", ".tox", ".mypy_cache", ".pytest_cache"}
@@ -298,9 +306,12 @@ def run_verify_git(
 
     g2_reports = []
     for src_file in diff_report.source_files:
-        p = Path(repo_dir) / src_file
-        if p.is_file() and test_code_combined:
-            src_code = p.read_text(encoding="utf-8", errors="replace")
+        if target_ref:
+            src_code = get_git_file_content(target_ref, src_file, repo_dir=repo_dir) or ""
+        else:
+            p = Path(repo_dir) / src_file
+            src_code = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
+        if src_code and test_code_combined:
             file_fns = [
                 f.name for f in diff_report.modified_functions
                 if not f.is_test and Path(f.file_path).as_posix() == Path(src_file).as_posix()
