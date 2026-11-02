@@ -21,7 +21,7 @@ We have fully implemented Cordis and empirically verified it across **22,595 AST
 1. **Classic Open-Source Baseline (3,657 functions in `python-dotenv`, `boltons`, `click`)**:
    - **Experiment A (Maintainer Commits)**: Proved **zero false positives** on legitimate clean historical commits in `< 6s`.
    - **Experiment B (Adversarial Agent PRs)**: Evaluated 3 realistic counterfeit agent failure modes. Standard `pytest` missed 100% of regressions (`0%` catch rate). Naive `git revert` (FixProof style) was fooled 100% of the time. Cordis achieved a **100% catch rate** across all gates.
-   - **Experiment C (Wild Open-Source Audit)**: Discovered **20 wild surviving AST mutants across 8 of 10 unmodified production functions** at upstream `HEAD`, and authored verified patches killing 100% of them.
+   - **Experiment C (Wild Open-Source Audit)**: Discovered **9 wild surviving AST mutants across 5 of 10 unmodified production functions** at upstream `HEAD`, and authored verified patches killing 100% of them.
 
 2. **Wild AI-Agent & MCP Repository Audit (18,938 functions in `fastmcp`, `smolagents`, `nao-mgs-workflow`)**:
    - **Git Attribution Analysis**: Up to **86.7%** of recent commits carry autonomous agent attribution (`Co-Authored-By: Claude`, `securebio-coding-agent[bot]`, `marvin-context-protocol[bot]`).
@@ -63,7 +63,7 @@ To understand how pervasive this is, we audited the #1 Python MCP framework (`fa
   *"We built Cordis—the unbribable CI prosecutor for AI-authored PRs. Cordis inspects every PR through four gates: it detects test tampering using 64-bit AST anchors, injects in-place AST mutants directly into the diff to prove tests aren't hollow, and runs 200-input differential property fuzzing. If an agent writes a counterfeit test, Cordis blocks it with forensic line-level proof."*
 
 - **0:44 - 1:00 (Traction & Ask)**:
-  *"We benchmarked Cordis across 22,000 functions in classic libraries like click and viral AI repos like fastmcp and smolagents. We proved AI repos suffer from 61% mock density and a 38% mutant survival rate. In fastmcp, 100% of mutants in core timeout normalization survived existing tests. Every engineering organization adopting coding agents will need an unbribable prosecutor. That’s Cordis."*
+  *"We benchmarked Cordis across 22,000 functions in classic libraries like click and viral AI repos like fastmcp and smolagents. We proved AI repos suffer from 43.6% mock density and a 29.6% mutant survival rate. In fastmcp, return expressions in timeout normalization survived existing tests. Every engineering organization adopting coding agents will need an unbribable prosecutor. That’s Cordis."*
 
 ---
 

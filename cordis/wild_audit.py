@@ -229,7 +229,7 @@ def format_wild_audit_markdown(findings: List[WildAuditFinding]) -> str:
         "### Key Forensic Takeaways from Wild Open-Source Audit:",
         "1. **Real-World Test Suites Have Critical Blind Spots**: Even top-tier open-source repositories with tens of thousands of stars (`click`, `boltons`, `python-dotenv`) suffer from missing boundary assertions and unexercised helper paths.",
         "2. **Boltons Boundary Checks & Omissions**: `clamp()`'s range assertion `if upper < lower: raise ValueError` has zero unit test coverage for invalid ranges or boundary shifts (`<` to `<=`), allowing inverted constraints to silently pass.",
-        "3. **Python-Dotenv Unexercised Stream Operations**: In `Reader.read()`, mutating boundary checks (`<` to `<=`) and perturbing the buffer index (`+` to `-`) allows all 58 parser unit tests to exit `0` because stream parsing relies solely on regex matches.",
+        "3. **Python-Dotenv Unexercised Key Syntax Parsing**: In `parse_key()`, mutating the return expression to `None` on Line 117 allows test suites to exit `0` because tests omit non-null assertions on single-quoted key segments.",
         "4. **Click WinConsole & Pager Gaps**: Windows console stream wrapping functions in `_winconsole.py` and pager flag evaluation in `_termui_impl.py` survive in-place mutation because test suites either mock streams or omit boundary condition checks.",
         "5. **Zero Synthetic Patches Required**: Cordis discovers these gaps automatically in unmodified upstream code without requiring human or agent-generated bug prompts.",
         "",

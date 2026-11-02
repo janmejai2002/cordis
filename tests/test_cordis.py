@@ -1002,6 +1002,30 @@ class ForeignTest(unittest.TestCase):
             )
             self.assertFalse(rep_uncalled.target_executed)
 
+            # Non-existent target function: target_executed must be False
+            rep_missing = run_repo_mutation_gate(
+                repo_root=tmproot,
+                source_rel_path="src/pkg/math.py",
+                test_rel_path="tests/test_math.py",
+                target_function="does_not_exist_at_all",
+                max_mutants=2,
+            )
+            self.assertFalse(rep_missing.target_executed)
+
+            # Broken test suite with collection/import error: target_executed must be False
+            (tests_dir / "test_broken.py").write_text(
+                "import broken_import_nonexistent_xyz\ndef test_broken(): pass\n",
+                encoding="utf-8",
+            )
+            rep_broken = run_repo_mutation_gate(
+                repo_root=tmproot,
+                source_rel_path="src/pkg/math.py",
+                test_rel_path="tests/test_broken.py",
+                target_function="called_fn",
+                max_mutants=2,
+            )
+            self.assertFalse(rep_broken.target_executed)
+
 
 
 
