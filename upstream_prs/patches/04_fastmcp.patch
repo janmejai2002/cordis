@@ -1,0 +1,59 @@
+From c92a1018262abf0a605da7177c9b1b7b0ff4b55d Mon Sep 17 00:00:00 2001
+From: janmejai2002 <janmejai2002@gmail.com>
+Date: Tue, 3 Nov 2026 00:48:41 +0530
+Subject: [PATCH] test: harden unit tests against surviving AST boundary/return
+ mutants found by Cordis
+
+---
+ tests/server/test_pagination.py | 13 +++++++++++++
+ tests/utilities/test_timeout.py | 14 ++++++++++++++
+ 2 files changed, 27 insertions(+)
+
+diff --git a/tests/server/test_pagination.py b/tests/server/test_pagination.py
+index f4645fc..e9635f6 100644
+--- a/tests/server/test_pagination.py
++++ b/tests/server/test_pagination.py
+@@ -660,3 +660,16 @@ class TestPaginationCycleDetection:
+             tools = await client.list_tools()
+             assert len(tools) == 25
+             assert len({t.name for t in tools}) == 25
++
++
++class TestPaginateSequenceBoundary:
++    def test_exact_sequence_boundary_cursor(self):
++        items = list(range(10))
++        page, next_cursor = paginate_sequence(items, cursor=None, page_size=10)
++        assert len(page) == 10
++        assert page == items
++        assert next_cursor is None
++
++        page_half, next_cursor_half = paginate_sequence(items, cursor=None, page_size=5)
++        assert len(page_half) == 5
++        assert next_cursor_half is not None
+diff --git a/tests/utilities/test_timeout.py b/tests/utilities/test_timeout.py
+index 6f28860..2d08f72 100644
+--- a/tests/utilities/test_timeout.py
++++ b/tests/utilities/test_timeout.py
+@@ -32,6 +32,20 @@ class TestNormalizeTimeoutToSeconds:
+         with pytest.raises(TypeError, match="Invalid timeout type"):
+             normalize_timeout_to_seconds(cast(Any, "1"))
+ 
++    def test_non_none_return_invariants(self):
++        res_int = normalize_timeout_to_seconds(5)
++        assert res_int is not None
++        assert res_int == 5.0
++        assert isinstance(res_int, float)
++        res_td = normalize_timeout_to_seconds(datetime.timedelta(seconds=12))
++        assert res_td is not None
++        assert res_td == 12.0
++        assert isinstance(res_td, float)
++        assert normalize_timeout_to_seconds(0) is None
++        assert normalize_timeout_to_seconds(None) is None
++        assert normalize_timeout_to_seconds(datetime.timedelta(seconds=0)) is None
++
++
+ 
+ class TestNormalizeTimeoutToTimedelta:
+     def test_none_stays_none(self):
+-- 
+2.49.0.windows.1

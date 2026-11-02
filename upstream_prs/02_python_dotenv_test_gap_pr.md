@@ -49,8 +49,8 @@ index 982305a..46d5693 100644
 +
 +def test_reader_read_buffer_bounds():
 +    from dotenv.parser import Reader, Error
-+    import pytest
-+    reader = Reader("abcde")
++    import io, pytest
++    reader = Reader(io.StringIO("abcde"))
 +    assert reader.read(2) == "ab"
 +    assert reader.read(3) == "cde"
 +    with pytest.raises(Error):
@@ -59,15 +59,16 @@ index 982305a..46d5693 100644
 +
 +def test_parse_key_single_quoted_and_branches():
 +    from dotenv.parser import Reader, parse_key
++    import io
 +    # Single-quoted key branch
-+    r1 = Reader("'MY_CONFIG_KEY'=some_value")
++    r1 = Reader(io.StringIO("'MY_CONFIG_KEY'=some_value"))
 +    assert parse_key(r1) == "MY_CONFIG_KEY"
 +    assert r1.peek(1) == "="
 +    # Comment branch
-+    r2 = Reader("# this is a comment")
++    r2 = Reader(io.StringIO("# this is a comment"))
 +    assert parse_key(r2) is None
 +    # Unquoted key branch
-+    r3 = Reader("BARE_KEY=val")
++    r3 = Reader(io.StringIO("BARE_KEY=val"))
 +    assert parse_key(r3) == "BARE_KEY"
 ```
 

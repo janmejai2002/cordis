@@ -1,0 +1,45 @@
+From a87b47602a7e6c837cb96e4c254d7b9242acfe05 Mon Sep 17 00:00:00 2001
+From: janmejai2002 <janmejai2002@gmail.com>
+Date: Tue, 3 Nov 2026 00:47:57 +0530
+Subject: [PATCH] test: harden unit tests against surviving AST boundary/return
+ mutants found by Cordis
+
+---
+ tests/test_parser.py | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/tests/test_parser.py b/tests/test_parser.py
+index 982305a..323f049 100644
+--- a/tests/test_parser.py
++++ b/tests/test_parser.py
+@@ -761,3 +761,28 @@ def test_parse_stream(test_input, expected):
+     result = parse_stream(io.StringIO(test_input))
+ 
+     assert list(result) == expected
++
++
++def test_reader_read_buffer_bounds():
++    from dotenv.parser import Reader, Error
++    import io, pytest
++    reader = Reader(io.StringIO("abcde"))
++    assert reader.read(2) == "ab"
++    assert reader.read(3) == "cde"
++    with pytest.raises(Error):
++        reader.read(1)
++
++
++def test_parse_key_single_quoted_and_branches():
++    from dotenv.parser import Reader, parse_key
++    import io
++    # Single-quoted key branch
++    r1 = Reader(io.StringIO("'MY_CONFIG_KEY'=some_value"))
++    assert parse_key(r1) == "MY_CONFIG_KEY"
++    assert r1.peek(1) == "="
++    # Comment branch
++    r2 = Reader(io.StringIO("# this is a comment"))
++    assert parse_key(r2) is None
++    # Unquoted key branch
++    r3 = Reader(io.StringIO("BARE_KEY=val"))
++    assert parse_key(r3) == "BARE_KEY"
+-- 
+2.49.0.windows.1

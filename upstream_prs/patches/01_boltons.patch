@@ -1,0 +1,53 @@
+From f0d40827165cca40630b3b2a203b09f370d33074 Mon Sep 17 00:00:00 2001
+From: janmejai2002 <janmejai2002@gmail.com>
+Date: Tue, 3 Nov 2026 00:47:44 +0530
+Subject: [PATCH] test: harden unit tests against surviving AST boundary/return
+ mutants found by Cordis
+
+---
+ tests/test_mathutils.py | 13 +++++++++++++
+ tests/test_strutils.py  | 11 +++++++++++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/tests/test_mathutils.py b/tests/test_mathutils.py
+index 39f9e0c..aef2da6 100644
+--- a/tests/test_mathutils.py
++++ b/tests/test_mathutils.py
+@@ -157,3 +157,16 @@ def test_bits_rshift_past_width():
+     assert len(shifted) == 0
+     assert shifted.as_bin() == ''
+     assert Bits('101') >> 1 == Bits('10')
++
++
++def test_clamp_boundary_and_inverted_bounds():
++    from pytest import raises
++    from boltons.mathutils import clamp
++    # Boundary validation: upper == lower
++    assert clamp(5, 2, 2) == 2
++    assert clamp(1, 2, 2) == 2
++    # Inverted bounds raising ValueError
++    with raises(ValueError):
++        clamp(5, lower=10, upper=2)
++    with raises(ValueError):
++        clamp(0, 5, 4)
+diff --git a/tests/test_strutils.py b/tests/test_strutils.py
+index 1c7e45a..ce2a8b9 100644
+--- a/tests/test_strutils.py
++++ b/tests/test_strutils.py
+@@ -443,3 +443,14 @@ def test_args2cmd_sep():
+     assert strutils.args2cmd(['aa', 'bb']) == 'aa bb'
+     assert strutils.args2cmd(['aa', 'bb'], sep='|') == 'aa|bb'
+     assert strutils.args2cmd(['a a', 'bb'], sep='|') == '"a a"|bb'
++
++
++def test_cardinalize_unit_and_plural():
++    from boltons.strutils import cardinalize
++    # Count == 1 branch
++    assert cardinalize("apple", 1) == "apple"
++    assert cardinalize("Day", 1) == "Day"
++    # Count != 1 branch
++    assert cardinalize("apple", 2) == "apples"
++    assert cardinalize("apple", 0) == "apples"
++    assert cardinalize("Wish", 3) == "Wishes"
+-- 
+2.49.0.windows.1

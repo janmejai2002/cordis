@@ -49,6 +49,7 @@ index 4f5e6d7..8a9b0c1 100644
 +
 +
 +def test_get_json_schema_type_direct_invariants():
++    import sys, types
 +    from smolagents._function_type_hints_utils import _get_json_schema_type
 +
 +    assert _get_json_schema_type(int) == {"type": "integer"}
@@ -66,6 +67,40 @@ index 4f5e6d7..8a9b0c1 100644
 +    assert fallback == {"type": "object"}
 +    assert isinstance(fallback.get("type"), str)
 +    assert fallback.get("type") == "object"
++
++    from PIL.Image import Image
++
++    class ImageTypeProxy:
++        def __str__(self):
++            return "Image"
++        def __eq__(self, other):
++            return other is Image or other == Image
++        def __hash__(self):
++            return hash("Image")
++
++    assert _get_json_schema_type(ImageTypeProxy()) == {"type": "image"}
++
++    fake_torch = types.ModuleType("torch")
++    class FakeTensor:
++        pass
++    fake_torch.Tensor = FakeTensor
++    orig_torch = sys.modules.get("torch")
++    sys.modules["torch"] = fake_torch
++    try:
++        class TensorTypeProxy:
++            def __str__(self):
++                return "Tensor"
++            def __eq__(self, other):
++                return other is FakeTensor or other == FakeTensor
++            def __hash__(self):
++                return hash("Tensor")
++
++        assert _get_json_schema_type(TensorTypeProxy()) == {"type": "audio"}
++    finally:
++        if orig_torch is not None:
++            sys.modules["torch"] = orig_torch
++        else:
++            sys.modules.pop("torch", None)
 ```
 
 ---

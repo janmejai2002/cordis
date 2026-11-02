@@ -74,7 +74,11 @@ index 9b8a7c6..e1f2a3b 100644
 +        page, next_cursor = paginate_sequence(items, cursor=None, page_size=10)
 +        assert len(page) == 10
 +        assert page == items
-+        assert next_cursor is not None
++        assert next_cursor is None
++
++        page_half, next_cursor_half = paginate_sequence(items, cursor=None, page_size=5)
++        assert len(page_half) == 5
++        assert next_cursor_half is not None
 ```
 
 ---

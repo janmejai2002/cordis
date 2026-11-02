@@ -1,0 +1,37 @@
+From b1c74fdadb778228d832f2bfbe7a775f607116e1 Mon Sep 17 00:00:00 2001
+From: janmejai2002 <janmejai2002@gmail.com>
+Date: Tue, 3 Nov 2026 00:48:07 +0530
+Subject: [PATCH] test: harden unit tests against surviving AST boundary/return
+ mutants found by Cordis
+
+---
+ tests/test_termui.py | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/tests/test_termui.py b/tests/test_termui.py
+index 1825b19..c5d26b1 100644
+--- a/tests/test_termui.py
++++ b/tests/test_termui.py
+@@ -1982,3 +1982,20 @@ def test_hide_input_value_never_leaks_when_err_true(runner):
+     result = runner.invoke(cli, input="leaky\n", mix_stderr=False)
+     assert "leaky" not in result.stdout
+     assert "leaky" not in result.stderr
++
++
++def test_less_uses_raw_mode_boundary():
++    from click._termui_impl import _less_uses_raw_mode
++    assert _less_uses_raw_mode("", ["-"]) is False
++    assert _less_uses_raw_mode("", ["--"]) is False
++    assert _less_uses_raw_mode("", ["-r"]) is True
++    assert _less_uses_raw_mode("", ["-R"]) is True
++    assert _less_uses_raw_mode("-R", []) is True
++    assert _less_uses_raw_mode("-r", []) is True
++    assert _less_uses_raw_mode("-X", []) is False
++    class BoundaryToken(str):
++        def __getitem__(self, item):
++            if item == slice(1, None, None) and len(self) == 1:
++                raise AssertionError("Boundary condition violated: token[1:] accessed on length-1 token!")
++            return super().__getitem__(item)
++    assert _less_uses_raw_mode("", [BoundaryToken("-")]) is False
+-- 
+2.49.0.windows.1
