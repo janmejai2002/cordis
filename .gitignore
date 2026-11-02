@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pyc
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+cordis_report.html
+cordis_report.md
+.cordis_ledger.db
+.cordis_memory.db*
+.real_repos_cache/
+*.egg-info/
+

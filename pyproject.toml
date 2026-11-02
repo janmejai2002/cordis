@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cordis-verify"
+version = "0.2.0"
+description = "Cordis: Independent Adversarial AI-PR & AST Invariant Prosecutor"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pytest>=7.4.0",
+    "hypothesis>=6.80.0",
+]
+
+[project.scripts]
+cordis = "cordis.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cordis*"]
