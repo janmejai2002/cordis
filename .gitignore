@@ -12,4 +12,7 @@ cordis_report.md
 .cordis_memory.db*
 .real_repos_cache/
 *.egg-info/
+YC_SUBMISSION_KIT.md
+*YC_SUBMISSION*
+*.local_backup
 

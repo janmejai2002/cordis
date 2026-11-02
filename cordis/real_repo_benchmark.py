@@ -419,8 +419,9 @@ def generate_benchmark_markdown_report(
     ]
 
     for st in index_stats:
+        clean_url = st.url[:-4] if st.url.endswith(".git") else st.url
         lines.append(
-            f"| **{st.name}** | [{st.url}]({st.url}) | [`{st.short_sha}`]({st.url}/commit/{st.full_sha}) | "
+            f"| **{st.name}** | [{clean_url}]({clean_url}) | [`{st.short_sha}`]({clean_url}/commit/{st.full_sha}) | "
             f"`{st.py_files_count}` files | `{st.functions_indexed}` functions | `{st.indexing_time_ms:.1f} ms` |"
         )
 

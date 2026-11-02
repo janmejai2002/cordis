@@ -13,9 +13,8 @@
 
 ---
 
-> ### 📑 Key Project Deliverables & Submission Kit
+> ### 📑 Key Project Deliverables
 > - 📄 [**ArXiv Technical Benchmark Paper (`TECHNICAL_REPORT.md`)**](TECHNICAL_REPORT.md) — *"Counterfeit Red: Auditing Reward-Hacking, Hollow Tests, and Surviving AST Mutants in AI-Authored Pull Requests"* (22,595 AST functions evaluated across 6 production repositories).
-> - 🚀 [**YC Submission Kit & Demo Playbook (`YC_SUBMISSION_KIT.md`)**](YC_SUBMISSION_KIT.md) — Copy-paste YC application answers, 60-second Founder Video script, and live GitHub PR prosecution steps.
 > - 📬 [**Verified Upstream Open-Source Test Patches (`upstream_prs/`)**](upstream_prs/) — Unified `git diff` patches for `boltons`, `python-dotenv`, `click`, `fastmcp`, and `smolagents` dropping wild mutant survival to 0% (100% killed).
 > - 🛑 [**Live Blocked Demo PR #1 on GitHub**](https://github.com/janmejai2002/cordis/pull/1) — Live adversarial agent PR prosecuted and blocked with automated forensic scorecard comment.
 > - 🔬 [**Live Open-Source Benchmark Telemetry (`REAL_GITHUB_BENCHMARK.md`)**](REAL_GITHUB_BENCHMARK.md) — Zero-mock empirical telemetry for Experiment A, B, and C.
@@ -56,9 +55,9 @@ python -m cordis.cli benchmark-repos
 
 | Repository | Upstream URL | Evaluated Commit SHA | Python Files | AST Functions Indexed | Indexing Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **python-dotenv** | [theskumar/python-dotenv](https://github.com/theskumar/python-dotenv.git) | [`bad5771`](https://github.com/theskumar/python-dotenv.git/commit/bad5771ce54fd643538f177aab1465e4375e2039) | `20` files | `191` functions | `47.6 ms` |
-| **boltons** | [mahmoud/boltons](https://github.com/mahmoud/boltons.git) | [`d31d821`](https://github.com/mahmoud/boltons.git/commit/d31d821d56c8f7756af9c30a864077f2e5855321) | `66` files | `1,619` functions | `251.3 ms` |
-| **click** | [pallets/click](https://github.com/pallets/click.git) | [`2247b35`](https://github.com/pallets/click.git/commit/2247b35ea1c47c727d7a06e51fa280e12a863ff6) | `91` files | `1,847` functions | `446.1 ms` |
+| **python-dotenv** | [theskumar/python-dotenv](https://github.com/theskumar/python-dotenv) | [`bad5771`](https://github.com/theskumar/python-dotenv/commit/bad5771ce54fd643538f177aab1465e4375e2039) | `20` files | `191` functions | `47.6 ms` |
+| **boltons** | [mahmoud/boltons](https://github.com/mahmoud/boltons) | [`d31d821`](https://github.com/mahmoud/boltons/commit/d31d821d56c8f7756af9c30a864077f2e5855321) | `66` files | `1,619` functions | `251.3 ms` |
+| **click** | [pallets/click](https://github.com/pallets/click) | [`2247b35`](https://github.com/pallets/click/commit/2247b35ea1c47c727d7a06e51fa280e12a863ff6) | `91` files | `1,847` functions | `446.1 ms` |
 
 ### 2. Experiment A: Legitimate Maintainer Commit Audit (`HEAD~1..HEAD`)
 

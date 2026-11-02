@@ -7,9 +7,9 @@ AST nodes and function anchors are indexed using 64-bit BLAKE2b hashing (`cordis
 
 | Repository | Upstream URL | Evaluated Commit SHA | Python Files | AST Functions Indexed | Indexing Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **python-dotenv** | [https://github.com/theskumar/python-dotenv.git](https://github.com/theskumar/python-dotenv.git) | [`bad5771`](https://github.com/theskumar/python-dotenv.git/commit/bad5771ce54fd643538f177aab1465e4375e2039) | `20` files | `191` functions | `112.0 ms` |
-| **boltons** | [https://github.com/mahmoud/boltons.git](https://github.com/mahmoud/boltons.git) | [`d31d821`](https://github.com/mahmoud/boltons.git/commit/d31d821d56c8f7756af9c30a864077f2e5855321) | `66` files | `1619` functions | `356.2 ms` |
-| **click** | [https://github.com/pallets/click.git](https://github.com/pallets/click.git) | [`2247b35`](https://github.com/pallets/click.git/commit/2247b35ea1c47c727d7a06e51fa280e12a863ff6) | `91` files | `1847` functions | `429.6 ms` |
+| **python-dotenv** | [https://github.com/theskumar/python-dotenv](https://github.com/theskumar/python-dotenv) | [`bad5771`](https://github.com/theskumar/python-dotenv/commit/bad5771ce54fd643538f177aab1465e4375e2039) | `20` files | `191` functions | `112.0 ms` |
+| **boltons** | [https://github.com/mahmoud/boltons](https://github.com/mahmoud/boltons) | [`d31d821`](https://github.com/mahmoud/boltons/commit/d31d821d56c8f7756af9c30a864077f2e5855321) | `66` files | `1619` functions | `356.2 ms` |
+| **click** | [https://github.com/pallets/click](https://github.com/pallets/click) | [`2247b35`](https://github.com/pallets/click/commit/2247b35ea1c47c727d7a06e51fa280e12a863ff6) | `91` files | `1847` functions | `429.6 ms` |
 
 ## 2. Experiment A: Legitimate Maintainer Commit Audit (`HEAD~1..HEAD`)
 Validates that Cordis introduces **zero false positives** on actual historical maintainer commits.

@@ -39,13 +39,12 @@ def main() -> int:
         repo_root / "README.md",
         repo_root / "REAL_GITHUB_BENCHMARK.md",
         repo_root / "TECHNICAL_REPORT.md",
-        repo_root / "YC_SUBMISSION_KIT.md",
         *sorted((repo_root / "upstream_prs").glob("*.md")),
     ]
 
     all_md_files = [
         p for p in repo_root.rglob("*.md")
-        if ".real_repos_cache" not in p.parts
+        if ".real_repos_cache" not in p.parts and "YC_SUBMISSION_KIT" not in p.name
     ]
 
     # Invariant 1: Markdown Table Integrity
