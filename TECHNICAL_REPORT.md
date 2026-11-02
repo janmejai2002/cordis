@@ -189,9 +189,9 @@ Gate 2 was run across 10 real production functions at upstream `HEAD` without in
 
 To test our thesis on actual AI-engineered software, we cloned and evaluated 3 viral AI-agent and `CLAUDE.md`-driven Python repositories:
 
-1. **`fastmcp`** (`https://github.com/jlowin/fastmcp.git`): The #1 Python Model Context Protocol framework (1,032 Python files, 16,266 AST functions).
-2. **`smolagents`** (`https://github.com/huggingface/smolagents.git`): Hugging Face's CodeAgent library (75 Python files, 1,357 AST functions).
-3. **`nao-mgs-workflow`** (`https://github.com/securebio/nao-mgs-workflow.git`): Production bioinformatics workflow repo whose `CLAUDE.md` mandates `Co-Authored-By: Claude` trailers and `@patch` unit tests (97 Python files, 1,315 AST functions).
+1. **`fastmcp`** (`https://github.com/jlowin/fastmcp`): The #1 Python Model Context Protocol framework (1,032 Python files, 16,266 AST functions).
+2. **`smolagents`** (`https://github.com/huggingface/smolagents`): Hugging Face's CodeAgent library (75 Python files, 1,357 AST functions).
+3. **`nao-mgs-workflow`** (`https://github.com/securebio/nao-mgs-workflow`): Production bioinformatics workflow repo whose `CLAUDE.md` mandates `Co-Authored-By: Claude` trailers and `@patch` unit tests (97 Python files, 1,315 AST functions).
 
 ### 4.1 AI Attribution Telemetry (`git log -n 30`)
 

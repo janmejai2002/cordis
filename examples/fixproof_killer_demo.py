@@ -1,4 +1,4 @@
-"""FixProof-Killer Demo Scenarios for Cordis YC Demo (100% Stdlib Runnable)."""
+"""FixProof-Killer Demo Scenarios for Cordis Demo (100% Stdlib Runnable)."""
 from __future__ import annotations
 
 OLD_BUGGY_SOURCE = """

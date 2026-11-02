@@ -1,5 +1,5 @@
 """Cordis Dark-Mode Visual Prosecutor Scorecard (HTML & Markdown Exporters).
-Generates publication-grade, self-contained visual prosecutor dashboards for YC demo & CI artifacts.
+Generates publication-grade, self-contained visual prosecutor dashboards for demonstration & CI artifacts.
 Adheres to ui-engineering standards: surface ladder, hairline borders, tabular numerals,
 zero external CDN dependencies, and high-contrast dark mode.
 """

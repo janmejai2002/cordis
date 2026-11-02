@@ -12,7 +12,12 @@ cordis_report.md
 .cordis_memory.db*
 .real_repos_cache/
 *.egg-info/
-YC_SUBMISSION_KIT.md
-*YC_SUBMISSION*
 *.local_backup
-
+AGENTS.md
+GEMINI.md
+verify_post_release_audit.py
+cordis_roadmap.html
+cordis-roadmap.workflow.json
+docs/cordis-roadmap.workflow.json
+.agent/
+.agents/

@@ -1,8 +1,8 @@
 """Empirical Live AI-Agent & CLAUDE.md Repository Audit for Cordis (Experiment D).
 Audits 3 viral AI-agent / CLAUDE.md-driven Python repositories:
-1. fastmcp (https://github.com/jlowin/fastmcp.git) — #1 Python MCP framework, uses CLAUDE.md
-2. smolagents (https://github.com/huggingface/smolagents.git) — Hugging Face's viral Python CodeAgent framework
-3. nao-mgs-workflow (https://github.com/securebio/nao-mgs-workflow.git) — Production repo with mandatory Claude attribution & @patch tests
+1. fastmcp (https://github.com/jlowin/fastmcp) — #1 Python MCP framework, uses CLAUDE.md
+2. smolagents (https://github.com/huggingface/smolagents) — Hugging Face's viral Python CodeAgent framework
+3. nao-mgs-workflow (https://github.com/securebio/nao-mgs-workflow) — Production repo with mandatory Claude attribution & @patch tests
 
 Executes:
 - Git attribution forensics (git log -n 30 for Co-Authored-By: Claude, Cursor, bot)
@@ -54,19 +54,19 @@ class AIRepoConfig:
 AI_REPOS: List[AIRepoConfig] = [
     AIRepoConfig(
         name="fastmcp",
-        url="https://github.com/jlowin/fastmcp.git",
+        url="https://github.com/jlowin/fastmcp",
         role="The #1 Python MCP framework (uses CLAUDE.md & Claude Code tooling)",
         claude_md_path="CLAUDE.md",
     ),
     AIRepoConfig(
         name="smolagents",
-        url="https://github.com/huggingface/smolagents.git",
+        url="https://github.com/huggingface/smolagents",
         role="Hugging Face's viral Python CodeAgent & Tool orchestration library",
         claude_md_path="CLAUDE.md",
     ),
     AIRepoConfig(
         name="nao-mgs-workflow",
-        url="https://github.com/securebio/nao-mgs-workflow.git",
+        url="https://github.com/securebio/nao-mgs-workflow",
         role="Production genomics repo whose CLAUDE.md mandates `Co-Authored-By: Claude` trailers and @patch unit tests",
         claude_md_path="CLAUDE.md",
     ),
@@ -527,9 +527,11 @@ def format_ai_audit_markdown(
 
     for s in summaries:
         cfg = s.config
+        clean_url = cfg.url[:-4] if cfg.url.endswith(".git") else cfg.url
+        head_link = f"[`{s.head_sha}`]({clean_url}/commit/{s.head_sha})" if s.head_sha else "`None`"
         lines.append(
-            f"| **{cfg.name}** | [{cfg.name}]({cfg.url})<br>_{cfg.role}_ | "
-            f"`{s.head_sha}` | `{s.py_files_count}` files | `{s.functions_indexed:,}` functions | "
+            f"| **{cfg.name}** | [{cfg.name}]({clean_url})<br>_{cfg.role}_ | "
+            f"{head_link} | `{s.py_files_count}` files | `{s.functions_indexed:,}` functions | "
             f"**{s.ai_attributed_commits} / {s.total_commits_scanned}** ({s.ai_attributed_commits / s.total_commits_scanned * 100:.1f}%) | "
             f"Mandates `Co-Authored-By: Claude` |"
         )
@@ -541,6 +543,10 @@ def format_ai_audit_markdown(
         "| :--- | :--- | :--- | :--- | :--- |",
     ])
 
+    repo_url_map = {cfg.name: (cfg.url[:-4] if cfg.url.endswith(".git") else cfg.url) for cfg in AI_REPOS}
+    for s in summaries:
+        repo_url_map[s.config.name] = s.config.url[:-4] if s.config.url.endswith(".git") else s.config.url
+
     sample_commits = []
     for s in summaries:
         ai_commits = [c for c in s.commits if "Claude" in c.attribution_tag or "Agent" in c.attribution_tag][:3]
@@ -548,8 +554,10 @@ def format_ai_audit_markdown(
 
     for c in sample_commits:
         trailer_str = f"`{c.trailers}`" if c.trailers else f"_{c.attribution_tag}_"
+        repo_base = repo_url_map.get(c.repo_name, "")
+        commit_link = f"[`{c.sha}`]({repo_base}/commit/{c.sha})" if repo_base else f"`{c.sha}`"
         lines.append(
-            f"| **{c.repo_name}** | `{c.sha}` | `{c.author}` | {trailer_str} | {c.subject[:75]} |"
+            f"| **{c.repo_name}** | {commit_link} | `{c.author}` | {trailer_str} | {c.subject[:75]} |"
         )
 
     lines.extend([
@@ -629,7 +637,7 @@ def format_ai_audit_markdown(
         f"**`{total_killed}` killed** · **`{total_survived}` survived untouched** (**`{survival_rate_pct:.1f}%` Mutant Survival Rate!**).",
         "",
         "### 5.5 Head-to-Head Comparison: Classic Human vs. AI-Agent / `CLAUDE.md` Repositories",
-        "| Forensic Dimension | Classic Human Repos (`python-dotenv`, `boltons`, `click`) | AI-Agent & `CLAUDE.md` Repos (`fastmcp`, `smolagents`, `nao-mgs-workflow`) | Forensic Impact / YC Thesis Proof |",
+        "| Forensic Dimension | Classic Human Repos (`python-dotenv`, `boltons`, `click`) | AI-Agent & `CLAUDE.md` Repos (`fastmcp`, `smolagents`, `nao-mgs-workflow`) | Forensic & CI/CD Engineering Impact |",
         "| :--- | :--- | :--- | :--- |",
         f"| **Mock Density** | **0.0% - 1.2%**<br>_Human maintainers test pure algorithmic transformations with real inputs_ | **{mock_density_pct:.1f}%** (`{total_g1_mocks}` mocks across {len(g1_findings)} test files)<br>_Agents isolate dependencies with `@patch` to force exit code 0_ | Coding agents aggressively mock out runtime modules to avoid dealing with side effects, creating hollow tests that pass even when dependencies break. |",
         f"| **Weak `is not None` Asserts** | **0.8%** (`3` of `380` assertions in tested files) | **{weak_assert_pct:.1f}%** (`{total_g1_weak}` of `{total_g1_asserts:,}` assertions in tested files)<br>_Up to 23.5% in `test_tokens.py`!_ | The **Counterfeit Red Trap**: agents satisfy test requirements by checking non-nullity (`assert res is not None`) rather than asserting mathematical or behavioral correctness. |",

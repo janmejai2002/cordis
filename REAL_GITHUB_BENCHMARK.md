@@ -68,22 +68,22 @@ Compares **Standard Unit Test Runner**, **Naive `git revert` (FixProof style)**,
 ### 5.1 Repository Inventory & AI Attribution Telemetry
 | Repository | Upstream URL & Role | Evaluated Head SHA | Python Files | AST Functions | Claude/Agent Commits (`-n 30`) | `CLAUDE.md` Mandate |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **fastmcp** | [fastmcp](https://github.com/jlowin/fastmcp.git)<br>_The #1 Python MCP framework (uses CLAUDE.md & Claude Code tooling)_ | `588297e` | `1032` files | `16,266` functions | **16 / 30** (53.3%) | Mandates `Co-Authored-By: Claude` |
-| **smolagents** | [smolagents](https://github.com/huggingface/smolagents.git)<br>_Hugging Face's viral Python CodeAgent & Tool orchestration library_ | `96f33fa` | `75` files | `1,357` functions | **7 / 30** (23.3%) | Mandates `Co-Authored-By: Claude` |
-| **nao-mgs-workflow** | [nao-mgs-workflow](https://github.com/securebio/nao-mgs-workflow.git)<br>_Production genomics repo whose CLAUDE.md mandates `Co-Authored-By: Claude` trailers and @patch unit tests_ | `ed358bc` | `97` files | `1,315` functions | **26 / 30** (86.7%) | Mandates `Co-Authored-By: Claude` |
+| **fastmcp** | [fastmcp](https://github.com/jlowin/fastmcp)<br>_The #1 Python MCP framework (uses CLAUDE.md & Claude Code tooling)_ | [`588297e`](https://github.com/jlowin/fastmcp/commit/588297e) | `1032` files | `16,266` functions | **16 / 30** (53.3%) | Mandates `Co-Authored-By: Claude` |
+| **smolagents** | [smolagents](https://github.com/huggingface/smolagents)<br>_Hugging Face's viral Python CodeAgent & Tool orchestration library_ | [`96f33fa`](https://github.com/huggingface/smolagents/commit/96f33fa) | `75` files | `1,357` functions | **7 / 30** (23.3%) | Mandates `Co-Authored-By: Claude` |
+| **nao-mgs-workflow** | [nao-mgs-workflow](https://github.com/securebio/nao-mgs-workflow)<br>_Production genomics repo whose CLAUDE.md mandates `Co-Authored-By: Claude` trailers and @patch unit tests_ | [`ed358bc`](https://github.com/securebio/nao-mgs-workflow/commit/ed358bc) | `97` files | `1,315` functions | **26 / 30** (86.7%) | Mandates `Co-Authored-By: Claude` |
 
 ### 5.2 Real Sample Commits Authored by AI Agents & Claude Code
 | Repository | Commit SHA | Author | AI Attribution Trailer / Pattern | Commit Message |
 | :--- | :--- | :--- | :--- | :--- |
-| **fastmcp** | `588297e` | `nate nowack` | `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` | Let private triage sweeps run without the Sol reviewer (#6229) |
-| **fastmcp** | `c1a3f96` | `nate nowack` | `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` | Close external PRs until their author is assigned again (#6227) |
-| **fastmcp** | `c3537ef` | `marvin-context-protocol[bot]` | `Co-authored-by: marvin-context-protocol[bot] <225465937+marvin-context-protocol[bot]@users.noreply.github.com>` | chore: Update SDK documentation (#5767) |
-| **smolagents** | `96f33fa` | `Pauline Bailly-Masson` | `Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>` | Bump doc-builder workflow pin (#2906) |
-| **smolagents** | `c30b115` | `hf-security-analysis[bot]` | `Co-authored-by: hf-security-analysis[bot] <265538906+hf-security-analysis[bot]@users.noreply.github.com>` | fix(ci): harden GitHub Actions workflows (#2558) (#2868) |
-| **smolagents** | `fcc81e9` | `dependabot[bot]` | `Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>` | Bump the actions group across 1 directory with 6 updates (#2558) |
-| **nao-mgs-workflow** | `5cc67c3` | `securebio-coding-agent[bot]` | `Co-authored-by: securebio-coding-agent <securebio-coding-agent@users.noreply.github.com>` | Prepare 3.4.0.3 for release (#1090) |
-| **nao-mgs-workflow** | `1f2eb25` | `securebio-coding-agent[bot]` | `Co-authored-by: securebio-coding-agent <securebio-coding-agent@users.noreply.github.com>` | Mark the repository as archived in the README (#1089) |
-| **nao-mgs-workflow** | `473a31c` | `securebio-coding-agent[bot]` | `Co-authored-by: securebio-coding-agent <securebio-coding-agent@users.noreply.github.com>` | Defer Nextflow 26.10.4 with the other 26.10.x releases (#1093) |
+| **fastmcp** | [`588297e`](https://github.com/jlowin/fastmcp/commit/588297e) | `nate nowack` | `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` | Let private triage sweeps run without the Sol reviewer (#6229) |
+| **fastmcp** | [`c1a3f96`](https://github.com/jlowin/fastmcp/commit/c1a3f96) | `nate nowack` | `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` | Close external PRs until their author is assigned again (#6227) |
+| **fastmcp** | [`c3537ef`](https://github.com/jlowin/fastmcp/commit/c3537ef) | `marvin-context-protocol[bot]` | `Co-authored-by: marvin-context-protocol[bot] <225465937+marvin-context-protocol[bot]@users.noreply.github.com>` | chore: Update SDK documentation (#5767) |
+| **smolagents** | [`96f33fa`](https://github.com/huggingface/smolagents/commit/96f33fa) | `Pauline Bailly-Masson` | `Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>` | Bump doc-builder workflow pin (#2906) |
+| **smolagents** | [`c30b115`](https://github.com/huggingface/smolagents/commit/c30b115) | `hf-security-analysis[bot]` | `Co-authored-by: hf-security-analysis[bot] <265538906+hf-security-analysis[bot]@users.noreply.github.com>` | fix(ci): harden GitHub Actions workflows (#2558) (#2868) |
+| **smolagents** | [`fcc81e9`](https://github.com/huggingface/smolagents/commit/fcc81e9) | `dependabot[bot]` | `Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>` | Bump the actions group across 1 directory with 6 updates (#2558) |
+| **nao-mgs-workflow** | [`5cc67c3`](https://github.com/securebio/nao-mgs-workflow/commit/5cc67c3) | `securebio-coding-agent[bot]` | `Co-authored-by: securebio-coding-agent <securebio-coding-agent@users.noreply.github.com>` | Prepare 3.4.0.3 for release (#1090) |
+| **nao-mgs-workflow** | [`1f2eb25`](https://github.com/securebio/nao-mgs-workflow/commit/1f2eb25) | `securebio-coding-agent[bot]` | `Co-authored-by: securebio-coding-agent <securebio-coding-agent@users.noreply.github.com>` | Mark the repository as archived in the README (#1089) |
+| **nao-mgs-workflow** | [`473a31c`](https://github.com/securebio/nao-mgs-workflow/commit/473a31c) | `securebio-coding-agent[bot]` | `Co-authored-by: securebio-coding-agent <securebio-coding-agent@users.noreply.github.com>` | Defer Nextflow 26.10.4 with the other 26.10.x releases (#1093) |
 
 ### 5.3 Gate 1: Test-Tampering & Anti-Mock Audit Across 10 Real Test Files
 > Measures real-world prevalence of weak `assert ... is not None` assertions, `@patch` / `MagicMock` isolation,
@@ -124,7 +124,7 @@ Compares **Standard Unit Test Runner**, **Naive `git revert` (FixProof style)**,
 **Gate 2 Aggregates**: **`27` AST mutants tested** across 10 production functions · **`19` killed** · **`8` survived untouched** (**`29.6%` Mutant Survival Rate!**).
 
 ### 5.5 Head-to-Head Comparison: Classic Human vs. AI-Agent / `CLAUDE.md` Repositories
-| Forensic Dimension | Classic Human Repos (`python-dotenv`, `boltons`, `click`) | AI-Agent & `CLAUDE.md` Repos (`fastmcp`, `smolagents`, `nao-mgs-workflow`) | Forensic Impact / YC Thesis Proof |
+| Forensic Dimension | Classic Human Repos (`python-dotenv`, `boltons`, `click`) | AI-Agent & `CLAUDE.md` Repos (`fastmcp`, `smolagents`, `nao-mgs-workflow`) | Forensic & CI/CD Engineering Impact |
 | :--- | :--- | :--- | :--- |
 | **Mock Density** | **0.0% - 1.2%**<br>_Human maintainers test pure algorithmic transformations with real inputs_ | **43.6%** (`466` mocks across 10 test files)<br>_Agents isolate dependencies with `@patch` to force exit code 0_ | Coding agents aggressively mock out runtime modules to avoid dealing with side effects, creating hollow tests that pass even when dependencies break. |
 | **Weak `is not None` Asserts** | **0.8%** (`3` of `380` assertions in tested files) | **6.7%** (`72` of `1,070` assertions in tested files)<br>_Up to 23.5% in `test_tokens.py`!_ | The **Counterfeit Red Trap**: agents satisfy test requirements by checking non-nullity (`assert res is not None`) rather than asserting mathematical or behavioral correctness. |
