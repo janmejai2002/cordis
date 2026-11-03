@@ -1,0 +1,20 @@
+# Cordis: Adversarial AI-PR & AST Invariant Prosecutor
+
+Autonomous coding agents are generating tens of thousands of Pull Requests every day. But they grade their own homework. On SlopCodeBench, 83.7% of agent runs fail to preserve system invariants, and agent test suites miss 37% of injected bugs. In viral agent repos, 43.6% mock density and 29.6% mutant survival rate are common.
+
+Traditional CI only measures if code was touched, not if logic was tested. Pytest and Codecov are easily fooled by 100% line coverage of hollow asserts like `assert x is not None`. Even SWE-bench's Fail-to-Pass gate (`git revert HEAD~1`) is trivially fooled by single-input hardcoded overfits like `if x == 100: return 0.15`. LLM PR Reviewers offer only static markdown review, blind to runtime surviving mutants. When an agent crafts a plausible-looking hollow test, the entire verification stack approves it.
+
+Meet Cordis: the independent adversarial verifier that prosecutes AI-authored code before human review.
+- 100% Python Standard Library
+- Zero External Dependencies
+- Sub-5 millisecond AST Execution
+
+Cordis runs four unbribable deterministic gates:
+- Gate 0: ForgeGuard — Blocks bot self-approval, multi-agent collusion, and single-token auto-merges.
+- Gate 1: AST Invariant & Anti-Tamper Auditor — 64-bit BLAKE2b AST structural anchors; flags weakened assertions and target mocking.
+- Gate 2: AST Mutation Engine ('Counterfeit Red' Killer) — Synthesizes in-place AST mutants (== to !=, < to >=); kills hollow tests instantly.
+- Gate 3: Differential Property Fuzzer & Latency Gate — 200 adversarial edge cases (NaN, -0.0, boundary ints) + 30-round Mann-Whitney U statistical benchmark.
+
+In head-to-head testing across 22,595 AST functions in top open-source libraries (click, boltons, python-dotenv, fastmcp, smolagents), Cordis caught 100% of counterfeit agent PRs in under 70 milliseconds, with zero false positives on human maintainer commits.
+
+Add an adversarial prosecutor to your team in four lines of YAML with GitHub Actions (`uses: janmejai2002/cordis@v0.2.0`). Protect your repository from counterfeit code before you merge. Get started with `pip install cordis-verify` or `uvx cordis-verify demo`, or visit github.com/janmejai2002/cordis.

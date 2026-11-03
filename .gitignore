@@ -21,6 +21,11 @@ cordis-roadmap.workflow.json
 docs/cordis-roadmap.workflow.json
 build/
 dist/
+node_modules/
+**/node_modules/
+**/.hyperframes/
+videos/**/renders/
+assets/voice/
 .agent/
 .agents/
 *LAUNCH*

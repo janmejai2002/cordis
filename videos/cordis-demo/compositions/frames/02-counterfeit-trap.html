@@ -1,0 +1,303 @@
+<template>
+  <style>
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #E6EDF3;
+      box-sizing: border-box;
+    }
+
+    .f02-bg {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 80% 20%, #101827 0%, #080C14 70%);
+      width: 1920px;
+      height: 1080px;
+    }
+
+    .f02-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .f02-container {
+      position: absolute;
+      top: 50px;
+      left: 100px;
+      right: 100px;
+      height: 820px; /* inside top 83% (<=900px) */
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .f02-kicker {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #F85149;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .f02-spike {
+      color: #F85149;
+      font-size: 20px;
+    }
+
+    .f02-headline {
+      font-size: 48px;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0;
+      color: #FFFFFF;
+    }
+
+    .f02-cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 24px;
+      margin-top: 10px;
+    }
+
+    .f02-col-card {
+      background: #0D1117;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+
+    .f02-col-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .f02-col-title {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 16px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+
+    .f02-pill-badge {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .f02-pill-green {
+      background: rgba(63, 185, 80, 0.15);
+      color: #3FB950;
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+
+    .f02-pill-red {
+      background: rgba(248, 81, 73, 0.15);
+      color: #FF7B72;
+      border: 1px solid rgba(248, 81, 73, 0.3);
+    }
+
+    .f02-code-snippet {
+      background: #161B22;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #C9D1D9;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .f02-code-kw { color: #FF7B72; }
+    .f02-code-fn { color: #D2A8FF; }
+    .f02-code-num { color: #79C0FF; }
+    .f02-code-str { color: #A5D6FF; }
+
+    .f02-fail-callout {
+      background: rgba(248, 81, 73, 0.1);
+      border-left: 3px solid #F85149;
+      padding: 10px 14px;
+      border-radius: 0 6px 6px 0;
+      font-size: 14px;
+      color: #FFA198;
+      line-height: 1.4;
+    }
+
+    .f02-stamp {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-12deg);
+      border: 3px solid #F85149;
+      color: #F85149;
+      background: rgba(13, 17, 23, 0.95);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      padding: 8px 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 25px rgba(248, 81, 73, 0.5);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .f02-bottom-bar {
+      margin-top: 10px;
+      background: rgba(210, 153, 34, 0.1);
+      border: 1px solid rgba(210, 153, 34, 0.4);
+      border-radius: 8px;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .f02-bar-text {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 16px;
+      font-weight: 600;
+      color: #F0B72F;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .f02-bar-tag {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 13px;
+      background: #D29922;
+      color: #080C14;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+  </style>
+
+  <div id="root" data-composition-id="02-counterfeit-trap" data-start="0" data-duration="20.03" data-width="1920" data-height="1080">
+    <!-- Full-bleed background layer -->
+    <div class="clip f02-bg" id="f02-bg-clip" data-start="0" data-duration="20.03" data-track-index="0">
+      <div class="f02-grid"></div>
+    </div>
+
+    <!-- Main Content Layer -->
+    <div class="clip" id="f02-content-clip" data-start="0" data-duration="20.03" data-track-index="1">
+      <div class="f02-container">
+        <!-- Header -->
+        <div class="f02-kicker" id="f02-kicker" data-layout-ignore>
+          <span class="f02-spike">✱</span> THE COUNTERFEIT RED TRAP
+        </div>
+        <h1 class="f02-headline" id="f02-headline" data-hold>
+          Three Industry Blind Spots That Approve Hollow Agent Code
+        </h1>
+
+        <div class="f02-cards-grid" data-layout-ignore data-hold>
+          <!-- Column 1: Pytest / Codecov -->
+          <div class="f02-col-card" id="f02-card-1" data-hold>
+            <div class="f02-col-header" data-layout-ignore>
+              <span class="f02-col-title">1. Pytest &amp; Codecov</span>
+              <span class="f02-pill-badge f02-pill-green">100% COVERAGE</span>
+            </div>
+            <div class="f02-code-snippet">
+              <div><span class="f02-code-kw">def</span> <span class="f02-code-fn">test_calc_discount</span>():</div>
+              <div style="padding-left: 16px;">res = calculate_tax(<span class="f02-code-num">100</span>)</div>
+              <div style="padding-left: 16px;"><span class="f02-code-kw">assert</span> res <span class="f02-code-kw">is not</span> <span class="f02-code-kw">None</span> <span style="color:#8B949E;"># Hollow!</span></div>
+            </div>
+            <div class="f02-fail-callout">
+              <strong>Touched ≠ Tested:</strong> Measures line execution without validating mathematical logic or edge conditions.
+            </div>
+          </div>
+
+          <!-- Column 2: SWE-bench F2P -->
+          <div class="f02-col-card" id="f02-card-2" data-hold>
+            <div class="f02-col-header" data-layout-ignore>
+              <span class="f02-col-title">2. SWE-bench Fail-to-Pass</span>
+              <span class="f02-pill-badge f02-pill-green">REVERT PASSED</span>
+            </div>
+            <div class="f02-code-snippet">
+              <div><span class="f02-code-kw">def</span> <span class="f02-code-fn">calculate_tax</span>(val):</div>
+              <div style="padding-left: 16px;"><span class="f02-code-kw">if</span> val == <span class="f02-code-num">100</span>:</div>
+              <div style="padding-left: 32px;"><span class="f02-code-kw">return</span> <span class="f02-code-num">0.15</span> <span style="color:#8B949E;"># Overfit!</span></div>
+            </div>
+            <div class="f02-fail-callout">
+              <strong>Hardcoded Overfit:</strong> `git revert HEAD~1` passes 100% because the agent hardcoded the single test input.
+            </div>
+            <div class="f02-stamp" id="f02-stamp-f2p">FOOLED 100%</div>
+          </div>
+
+          <!-- Column 3: LLM Reviewers -->
+          <div class="f02-col-card" id="f02-card-3" data-hold>
+            <div class="f02-col-header" data-layout-ignore>
+              <span class="f02-col-title">3. LLM PR Reviewers</span>
+              <span class="f02-pill-badge f02-pill-red">BLIND AT RUNTIME</span>
+            </div>
+            <div class="f02-code-snippet" style="font-size: 12px;">
+              <div style="color: #58A6FF;">&gt; Copilot Review / CodeRabbit:</div>
+              <div style="color: #7EE787;">"LGTM! The patch is clean and adheres to style guidelines. Approved!"</div>
+            </div>
+            <div class="f02-fail-callout">
+              <strong>Static Hallucination:</strong> Static markdown review cannot execute mutations or simulate surviving mutants at runtime.
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom alert bar -->
+        <div class="f02-bottom-bar" id="f02-bar" data-hold data-layout-ignore>
+          <div class="f02-bar-text">
+            <span>⚠</span> When an agent crafts a plausible-looking hollow test, the entire verification stack approves it.
+          </div>
+          <div class="f02-bar-tag" data-layout-ignore>CRITICAL CI BLIND SPOT</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // Scene 1 (0.0-6.0s): Header and Card 1 (Pytest/Codecov)
+      tl.fromTo("#f02-kicker", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+      tl.fromTo("#f02-headline", { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.4);
+      tl.fromTo("#f02-card-1", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 1.2);
+      tl.to("#f02-card-1", { y: -4, duration: 2.0, ease: "sine.inOut", yoyo: true, repeat: 1 }, 3.5);
+
+      // Scene 2 (6.0-13.0s): Card 2 (SWE-bench F2P) and FOOLED stamp
+      tl.fromTo("#f02-card-2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 6.2);
+      tl.fromTo("#f02-stamp-f2p", { opacity: 0, scale: 2.0, rotation: 10 }, { opacity: 1, scale: 1, rotation: -12, duration: 0.4, ease: "back.out(2)" }, 9.5);
+      tl.to("#f02-stamp-f2p", { scale: 1.04, duration: 1.5, ease: "sine.inOut", yoyo: true }, 10.8);
+
+      // Scene 3 (13.0-19.43s): Card 3 (LLM PR Reviewers) and Bottom alert bar
+      tl.fromTo("#f02-card-3", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 12.8);
+      tl.fromTo("#f02-bar", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 15.5);
+      tl.to("#f02-bar", { scale: 1.01, duration: 1.8, ease: "sine.inOut", yoyo: true }, 17.0);
+
+      window.__timelines["02-counterfeit-trap"] = tl;
+    </script>
+  </div>
+</template>

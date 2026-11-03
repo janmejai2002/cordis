@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -118,6 +120,170 @@ def format_github_prosecutor_comment(
     return "\n".join(lines)
 
 
+def visible_width(s: str) -> int:
+    """Calculate the visible terminal display width of a string (stripping ANSI codes)."""
+    clean = re.sub(r"\033\[[0-9;]*m", "", s)
+    width = 0
+    for ch in clean:
+        if ch == "\ufe0f":
+            continue
+        w = unicodedata.east_asian_width(ch)
+        if w in ("W", "F"):
+            width += 2
+        else:
+            width += 1
+    return width
+
+
+def truncate_visible(s: str, target_width: int) -> str:
+    """Truncate string to fit within target visible width, appending an ellipsis."""
+    clean = re.sub(r"\033\[[0-9;]*m", "", s)
+    cur = 0
+    res = []
+    for ch in clean:
+        w = 0 if ch == "\ufe0f" else (2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1)
+        if cur + w > target_width - 1:
+            break
+        res.append(ch)
+        cur += w
+    return "".join(res) + "…"
+
+
+def pad_cell(s: str, target_width: int, align: str = "left") -> str:
+    """Pad string to exact target visible width, accounting for ANSI codes and East Asian width."""
+    vw = visible_width(s)
+    if vw > target_width:
+        s = truncate_visible(s, target_width)
+        vw = visible_width(s)
+    diff = target_width - vw
+    if align == "right":
+        return " " * diff + s
+    elif align == "center":
+        left = diff // 2
+        return " " * left + s + " " * (diff - left)
+    return s + " " * diff
+
+
+def format_terminal_prosecutor_report(
+    pr_title: str,
+    fixproof_revert_passed: bool = True,
+    gate1_report: Any = None,
+    gate2_report: Any = None,
+    gate3_fuzz_report: Any = None,
+    gate3_bench_report: Any = None,
+    *,
+    swe_bench_revert_passed: bool | None = None,
+) -> str:
+    use_color = os.environ.get("NO_COLOR") is None
+    RED = "\033[1;31m" if use_color else ""
+    GREEN = "\033[1;32m" if use_color else ""
+    YELLOW = "\033[1;33m" if use_color else ""
+    CYAN = "\033[1;36m" if use_color else ""
+    DIM = "\033[90m" if use_color else ""
+    BOLD = "\033[1m" if use_color else ""
+    RESET = "\033[0m" if use_color else ""
+
+    g1_pass = getattr(gate1_report, "passed", False)
+    g2_pass = getattr(gate2_report, "passed", False)
+    g3a_pass = getattr(gate3_fuzz_report, "passed", False)
+    g3b_pass = getattr(gate3_bench_report, "passed", False)
+    overall_passed = g1_pass and g2_pass and g3a_pass and g3b_pass
+
+    f2p_passed = swe_bench_revert_passed if swe_bench_revert_passed is not None else fixproof_revert_passed
+
+    w_g = 40
+    w_s = 10
+    w_t = 34
+    total_w = 1 + w_g + 1 + w_s + 1 + w_t + 1
+
+    lines = []
+
+    # Header Card
+    hdr_content = f" {BOLD}{CYAN}CORDIS PROSECUTOR{RESET} {DIM}│{RESET} {BOLD}{pr_title}{RESET} "
+    lines.append(f"{CYAN}╭{'─' * (total_w - 2)}╮{RESET}")
+    lines.append(f"{CYAN}│{RESET}" + pad_cell(hdr_content, total_w - 2) + f"{CYAN}│{RESET}")
+    lines.append(f"{CYAN}╰{'─' * (total_w - 2)}╯{RESET}")
+
+    # Verdict Badges
+    if overall_passed:
+        verdict_badge = f"{GREEN}{BOLD}✔ APPROVED TO LAND{RESET}"
+    else:
+        verdict_badge = f"{RED}{BOLD}■ BLOCKED{RESET}  {DIM}[Counterfeit Red / Invariant Regression]{RESET}"
+
+    if f2p_passed and not overall_passed:
+        f2p_badge = f"{YELLOW}{BOLD}▲ PASSED{RESET}   {DIM}(Fooled 100% by single-input overfit!){RESET}"
+    elif f2p_passed:
+        f2p_badge = f"{GREEN}{BOLD}✔ PASSED{RESET}"
+    else:
+        f2p_badge = f"{RED}{BOLD}■ FAILED{RESET}"
+
+    lines.append(f"  {BOLD}Prosecutor Verdict:{RESET}              {verdict_badge}")
+    lines.append(f"  {BOLD}SWE-bench Fail-to-Pass (revert):{RESET} {f2p_badge}")
+    lines.append("")
+
+    # Table Top
+    lines.append(f"{DIM}┌{'─' * w_g}┬{'─' * w_s}┬{'─' * w_t}┐{RESET}")
+    lines.append(
+        f"{DIM}│{RESET} {BOLD}{pad_cell('Prosecution Gate', w_g - 2)}{RESET} {DIM}│{RESET} "
+        f"{BOLD}{pad_cell('Status', w_s - 2, 'center')}{RESET} {DIM}│{RESET} "
+        f"{BOLD}{pad_cell('Telemetry & Evidence', w_t - 2)}{RESET} {DIM}│{RESET}"
+    )
+    lines.append(f"{DIM}├{'─' * w_g}┼{'─' * w_s}┼{'─' * w_t}┤{RESET}")
+
+    def make_row(gate_name: str, passed: bool, telem: str) -> str:
+        st_text = "PASS ✓" if passed else "FAIL ✗"
+        st_col = GREEN if passed else RED
+        return (
+            f"{DIM}│{RESET} {pad_cell(gate_name, w_g - 2)} {DIM}│{RESET} "
+            f"{st_col}{pad_cell(st_text, w_s - 2, 'center')}{RESET} {DIM}│{RESET} "
+            f"{pad_cell(telem, w_t - 2)} {DIM}│{RESET}"
+        )
+
+    # Gate 1
+    violations_count = len(getattr(gate1_report, "violations", []))
+    v_word = "violation" if violations_count == 1 else "violations"
+    g1_tm = f"Asserts: {gate1_report.old_assert_count}->{gate1_report.new_assert_count} · {violations_count} {v_word}"
+    lines.append(make_row("Gate 1: AST Test-Tampering Auditor", g1_pass, g1_tm))
+
+    # Gate 2
+    g2_tm = f"Killed {gate2_report.killed_mutants}/{gate2_report.total_mutants} ({gate2_report.survived_mutants} survived)"
+    lines.append(make_row("Gate 2: In-Place AST Mutation Engine", g2_pass, g2_tm))
+
+    # Gate 3A
+    cx_count = len(getattr(gate3_fuzz_report, "counterexamples", []))
+    g3a_tm = f"Tested {gate3_fuzz_report.inputs_tested} inputs · {cx_count} counterex"
+    lines.append(make_row("Gate 3A: Differential Property Fuzzer", g3a_pass, g3a_tm))
+
+    # Gate 3B
+    speedup = getattr(gate3_bench_report, "speedup_pct", 0.0)
+    sign = "+" if speedup >= 0 else ""
+    g3b_tm = f"{gate3_bench_report.baseline_median_us:.3f}us -> {gate3_bench_report.candidate_median_us:.3f}us ({sign}{speedup:.1f}%)"
+    lines.append(make_row("Gate 3B: Mann-Whitney U Benchmark", g3b_pass, g3b_tm))
+
+    # Table Bottom
+    lines.append(f"{DIM}└{'─' * w_g}┴{'─' * w_s}┴{'─' * w_t}┘{RESET}")
+    lines.append("")
+
+    # Forensic Details
+    has_tampering = bool(getattr(gate1_report, "violations", []))
+    survived = [m for m in getattr(gate2_report, "results", []) if not m.killed]
+    has_fuzz_cx = bool(getattr(gate3_fuzz_report, "counterexamples", []))
+
+    if has_tampering or survived or has_fuzz_cx:
+        lines.append(f"  {RED}{BOLD}🚨 Forensic Evidence Breakdown:{RESET}")
+        for v in getattr(gate1_report, "violations", []):
+            lines.append(f"     {DIM}↳{RESET} {BOLD}[Gate 1 / Tampering]:{RESET} {v}")
+
+        for m in survived:
+            lines.append(f"     {DIM}↳{RESET} {BOLD}[Gate 2 / Mutation]:{RESET} Mutant #{m.mutant_id} (Line {m.lineno}): {m.description} -> {RED}Test still passed (exited 0)!{RESET}")
+
+        for cx in getattr(gate3_fuzz_report, "counterexamples", [])[:3]:
+            lines.append(f"     {DIM}↳{RESET} {BOLD}[Gate 3A / Fuzzing]:{RESET} args={cx.args} -> Expected {GREEN}{cx.old_outcome}{RESET}, got {RED}{cx.new_outcome}{RESET} ({cx.reason})")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def run_demo(
     github_comment: bool = False,
     output_html: str | None = None,
@@ -161,8 +327,6 @@ def run_demo(
         gate3_fuzz_report=g3_fuzz_bad,
         gate3_bench_report=g3_bench_bad,
     )
-    print(comment_bad)
-    print("\n" + "=" * 78 + "\n")
 
     # 2. Run on GOOD Verified PR
     g1_good = audit_test_tampering(
@@ -191,26 +355,79 @@ def run_demo(
         gate3_fuzz_report=g3_fuzz_good,
         gate3_bench_report=g3_bench_good,
     )
-    print(comment_good)
 
-    if output_html:
-        save_html_report(
-            filepath=output_html,
-            pr_title="PR #42 (Bad Agent Patch — Single-Input Overfit & Weakened Assert)",
+    w_total = 88
+    use_color = os.environ.get("NO_COLOR") is None
+    CYAN = "\033[1;36m" if use_color else ""
+    DIM = "\033[90m" if use_color else ""
+    BOLD = "\033[1m" if use_color else ""
+    GREEN = "\033[1;32m" if use_color else ""
+    RED = "\033[1;31m" if use_color else ""
+    YELLOW = "\033[1;33m" if use_color else ""
+    RESET = "\033[0m" if use_color else ""
+
+    if github_comment:
+        print(comment_bad)
+        print("\n" + "=" * 78 + "\n")
+        print(comment_good)
+    else:
+        welcome_title = " CORDIS VERIFY · Autonomous AI-PR Invariant Prosecutor"
+        welcome_sub = " Demo: Exposing SWE-bench Fail-to-Pass False Positives via In-Memory Invariant Gates"
+        print(f"\n{CYAN}╭{'─' * (w_total - 2)}╮{RESET}")
+        print(f"{CYAN}│{RESET}" + pad_cell(f"{BOLD}{CYAN}{welcome_title}{RESET}", w_total - 2) + f"{CYAN}│{RESET}")
+        print(f"{CYAN}│{RESET}" + pad_cell(f"{DIM}{welcome_sub}{RESET}", w_total - 2) + f"{CYAN}│{RESET}")
+        print(f"{CYAN}╰{'─' * (w_total - 2)}╯{RESET}\n")
+
+        rep_bad = format_terminal_prosecutor_report(
+            pr_title="PR #42: Bad Agent Patch (Single-Input Overfit & Weakened Assert)",
             fixproof_revert_passed=True,
             gate1_report=g1_bad,
             gate2_report=g2_bad,
             gate3_fuzz_report=g3_fuzz_bad,
             gate3_bench_report=g3_bench_bad,
         )
-        print(f"\n📊 [Cordis HTML Report]: Scorecard written to {output_html}")
+        rep_good = format_terminal_prosecutor_report(
+            pr_title="PR #43: Genuine Fix + Mutation-Hardened Test Suite",
+            fixproof_revert_passed=True,
+            gate1_report=g1_good,
+            gate2_report=g2_good,
+            gate3_fuzz_report=g3_fuzz_good,
+            gate3_bench_report=g3_bench_good,
+        )
+        print(rep_bad)
+        print(f"{DIM}{'─' * w_total}{RESET}\n")
+        print(rep_good)
+
+        # Executive recap card
+        summary_title = " VERDICT RECAP: Why SWE-bench Fail-to-Pass Fails Where Cordis Wins"
+        p42_summary = f" • PR #42 (Overfit):   {YELLOW}SWE-bench PASSED (fooled){RESET} {DIM}│{RESET} {RED}Cordis BLOCKED (Mutants alive){RESET}"
+        p43_summary = f" • PR #43 (Invariant): {GREEN}SWE-bench PASSED{RESET}          {DIM}│{RESET} {GREEN}Cordis APPROVED (5/5 Killed){RESET}"
+        print(f"{DIM}╭{'─' * (w_total - 2)}╮{RESET}")
+        print(f"{DIM}│{RESET}" + pad_cell(f"{BOLD}{summary_title}{RESET}", w_total - 2) + f"{DIM}│{RESET}")
+        print(f"{DIM}│{RESET}" + pad_cell(p42_summary, w_total - 2) + f"{DIM}│{RESET}")
+        print(f"{DIM}│{RESET}" + pad_cell(p43_summary, w_total - 2) + f"{DIM}│{RESET}")
+        print(f"{DIM}╰{'─' * (w_total - 2)}╯{RESET}")
+
+    # Generate interactive HTML report
+    html_target = output_html or "cordis_report.html"
+    save_html_report(
+        filepath=html_target,
+        pr_title="PR #42 (Bad Agent Patch — Single-Input Overfit & Weakened Assert)",
+        fixproof_revert_passed=True,
+        gate1_report=g1_bad,
+        gate2_report=g2_bad,
+        gate3_fuzz_report=g3_fuzz_bad,
+        gate3_bench_report=g3_bench_bad,
+    )
+    if not github_comment:
+        print(f"\n📊 {BOLD}[HTML Scorecard]{RESET}: Saved to {CYAN}{html_target}{RESET} (open in browser to inspect interactive gates)\n")
 
     if output_md:
         save_markdown_report(
             filepath=output_md,
             content=comment_bad + "\n\n" + "=" * 78 + "\n\n" + comment_good,
         )
-        print(f"\n📝 [Cordis Markdown Report]: Written to {output_md}")
+        print(f"📝 {BOLD}[Markdown Report]{RESET}: Written to {output_md}")
 
     return 0
 

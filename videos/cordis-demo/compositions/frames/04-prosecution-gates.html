@@ -1,0 +1,271 @@
+<template>
+  <style>
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #E6EDF3;
+      box-sizing: border-box;
+    }
+
+    .f04-bg {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 30%, #0D1628 0%, #080C14 75%);
+      width: 1920px;
+      height: 1080px;
+    }
+
+    .f04-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .f04-container {
+      position: absolute;
+      top: 50px;
+      left: 100px;
+      right: 100px;
+      height: 820px; /* strictly inside top 83% (<=900px) */
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .f04-header-row {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .f04-kicker {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #58A6FF;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .f04-headline {
+      font-size: 44px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 4px 0 0 0;
+      color: #FFFFFF;
+    }
+
+    .f04-verdict-tag {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 14px;
+      font-weight: 700;
+      color: #3FB950;
+      background: rgba(63, 185, 80, 0.12);
+      border: 1px solid rgba(63, 185, 80, 0.4);
+      padding: 6px 14px;
+      border-radius: 9999px;
+    }
+
+    /* Architecture schematic showcase */
+    .f04-arch-wrapper {
+      position: relative;
+      width: 1200px;
+      height: 480px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .f04-arch-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Pulse laser indicator */
+    .f04-laser-scan {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 4px;
+      background: #58A6FF;
+      box-shadow: 0 0 20px #58A6FF, 0 0 40px #58A6FF;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* 4 Gates Lower Card Triplet / Quad */
+    .f04-gates-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      width: 1200px;
+    }
+
+    .f04-gate-card {
+      background: #0D1117;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+      position: relative;
+    }
+
+    .f04-gate-num {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: #58A6FF;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .f04-gate-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #FFFFFF;
+      line-height: 1.2;
+    }
+
+    .f04-gate-desc {
+      font-size: 12px;
+      color: #8B949E;
+      line-height: 1.4;
+    }
+
+    .f04-active-ring {
+      position: absolute;
+      inset: -1px;
+      border-radius: 10px;
+      border: 2px solid #58A6FF;
+      pointer-events: none;
+      opacity: 0;
+    }
+  </style>
+
+  <div id="root" data-composition-id="04-prosecution-gates" data-start="0" data-duration="24.69" data-width="1920" data-height="1080">
+    <!-- Full-bleed background layer -->
+    <div class="clip f04-bg" id="f04-bg-clip" data-start="0" data-duration="24.69" data-track-index="0">
+      <div class="f04-grid"></div>
+    </div>
+
+    <!-- Main Content Layer -->
+    <div class="clip" id="f04-content-clip" data-start="0" data-duration="24.69" data-track-index="1">
+      <div class="f04-container">
+        <!-- Header -->
+        <div class="f04-header-row">
+          <div>
+            <div class="f04-kicker" id="f04-kicker" data-layout-ignore>
+              <span>✱</span> THE VERIFICATION ARCHITECTURE
+            </div>
+            <h1 class="f04-headline" id="f04-headline">
+              The Four Deterministic Prosecution Gates
+            </h1>
+          </div>
+          <div class="f04-verdict-tag" id="f04-tag" data-layout-ignore>
+            UNBRIBABLE VERIFICATION PIPELINE
+          </div>
+        </div>
+
+        <!-- Schematic Display -->
+        <div class="f04-arch-wrapper" id="f04-arch">
+          <img src="assets/cordis-architecture.svg" alt="Cordis Architecture" class="f04-arch-img" />
+          <div class="f04-laser-scan" id="f04-laser"></div>
+        </div>
+
+        <!-- 4 Gates Detail Cards -->
+        <div class="f04-gates-grid" data-layout-ignore data-hold>
+          <!-- Gate 0 -->
+          <div class="f04-gate-card" id="f04-card-0">
+            <div class="f04-active-ring" id="f04-ring-0"></div>
+            <div class="f04-gate-num">Gate 00</div>
+            <div class="f04-gate-title">ForgeGuard</div>
+            <div class="f04-gate-desc">Blocks bot self-approval, multi-agent collusion, &amp; single-token auto-merges.</div>
+          </div>
+
+          <!-- Gate 1 -->
+          <div class="f04-gate-card" id="f04-card-1">
+            <div class="f04-active-ring" id="f04-ring-1"></div>
+            <div class="f04-gate-num">Gate 01</div>
+            <div class="f04-gate-title">AST Auditor</div>
+            <div class="f04-gate-desc">64-bit BLAKE2b AST structural anchors; flags weakened asserts &amp; mocking.</div>
+          </div>
+
+          <!-- Gate 2 -->
+          <div class="f04-gate-card" id="f04-card-2">
+            <div class="f04-active-ring" id="f04-ring-2"></div>
+            <div class="f04-gate-num" style="color: #F85149;">Gate 02</div>
+            <div class="f04-gate-title">Mutation Engine</div>
+            <div class="f04-gate-desc">In-place AST operator inversions (== to !=). Kills hollow tests instantly.</div>
+          </div>
+
+          <!-- Gate 3 -->
+          <div class="f04-gate-card" id="f04-card-3">
+            <div class="f04-active-ring" id="f04-ring-3"></div>
+            <div class="f04-gate-num" style="color: #3FB950;">Gate 03</div>
+            <div class="f04-gate-title">Property Fuzzer</div>
+            <div class="f04-gate-desc">200 adversarial edge cases (NaN, -0.0) + 30-round Mann-Whitney U test.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // Entrance: Header & Schematic
+      tl.fromTo("#f04-kicker", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+      tl.fromTo("#f04-headline", { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.4);
+      tl.fromTo("#f04-tag", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, 0.6);
+      tl.fromTo("#f04-arch", { opacity: 0, scale: 0.96, y: 20 }, { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "power3.out" }, 0.8);
+      
+      // Cards initial entrance
+      tl.fromTo("#f04-card-0", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5 }, 1.5);
+      tl.fromTo("#f04-card-1", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5 }, 1.7);
+      tl.fromTo("#f04-card-2", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5 }, 1.9);
+      tl.fromTo("#f04-card-3", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5 }, 2.1);
+
+      // Phase 1: Gate 0 ForgeGuard Highlight (t=2.5s - 5.5s)
+      tl.fromTo("#f04-laser", { opacity: 1, x: 60 }, { x: 336, duration: 3.0, ease: "power1.inOut" }, 2.5);
+      tl.fromTo("#f04-ring-0", { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.4 }, 3.0);
+      tl.to("#f04-ring-0", { opacity: 0.3, duration: 0.4 }, 5.5);
+
+      // Phase 2: Gate 1 AST Auditor Highlight (t=5.5s - 10.0s)
+      tl.to("#f04-laser", { x: 624, duration: 4.5, ease: "power1.inOut" }, 5.5);
+      tl.fromTo("#f04-ring-1", { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.4 }, 6.2);
+      tl.to("#f04-ring-1", { opacity: 0.3, duration: 0.4 }, 10.0);
+
+      // Phase 3: Gate 2 Mutation Engine Highlight (t=10.0s - 16.5s)
+      tl.to("#f04-laser", { x: 912, duration: 6.0, ease: "power1.inOut" }, 10.0);
+      tl.fromTo("#f04-ring-2", { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.4 }, 11.0);
+      tl.to("#f04-ring-2", { opacity: 0.3, duration: 0.4 }, 16.5);
+
+      // Phase 4: Gate 3 Differential Fuzzer & Latency Gate (t=16.5s - 24.19s)
+      tl.to("#f04-laser", { x: 1140, duration: 5.5, ease: "power1.inOut" }, 16.5);
+      tl.fromTo("#f04-ring-3", { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.4 }, 17.5);
+      tl.to("#f04-laser", { opacity: 0, duration: 0.8 }, 22.5);
+
+      window.__timelines["04-prosecution-gates"] = tl;
+    </script>
+  </div>
+</template>

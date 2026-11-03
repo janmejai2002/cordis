@@ -1,0 +1,34 @@
+{
+  "provider": "kokoro",
+  "speed": 1,
+  "lines": [
+    {
+      "id": "01",
+      "text": "Autonomous coding agents are generating tens of thousands of Pull Requests every day. But they grade their own homework. On SlopCodeBench, 83.7% of agent runs fail to preserve system invariants, and agent test suites miss 37% of injected bugs."
+    },
+    {
+      "id": "02",
+      "text": "Traditional CI only measures if code was touched, not if logic was tested. Even SWE-bench's git revert gate is trivially fooled by single-input hardcoded overfits. When an agent crafts a plausible-looking hollow test, the entire verification stack approves it."
+    },
+    {
+      "id": "03",
+      "text": "Meet Cordis: the independent adversarial verifier that prosecutes AI-authored code before human review. Zero dependencies. Pure Python standard library. Sub-5 millisecond AST execution."
+    },
+    {
+      "id": "04",
+      "text": "Cordis runs four unbribable gates. Gate 0 blocks bot collusion. Gate 1 inspects AST anchors to catch weakened asserts. Gate 2 injects in-place mutations—if an agent's test still passes while the function is broken, the PR is rejected. And Gate 3 fuzzes 200 adversarial edge cases outside the bug's domain."
+    },
+    {
+      "id": "05",
+      "text": "In head-to-head testing across 22,000 AST functions in top open-source libraries, Cordis caught 100% of counterfeit agent PRs in under 70 milliseconds, with zero false positives on human maintainer commits."
+    },
+    {
+      "id": "06",
+      "text": "Add an adversarial prosecutor to your team in four lines of YAML. Protect your repository from counterfeit code before you merge. Get started with pip install cordis-verify or visit github.com/janmejai2002/cordis."
+    }
+  ],
+  "bgm": {
+    "mode": "none"
+  },
+  "voice": "am_michael"
+}

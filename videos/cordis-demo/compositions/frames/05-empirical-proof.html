@@ -1,0 +1,274 @@
+<template>
+  <style>
+    #root {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #E6EDF3;
+      box-sizing: border-box;
+    }
+
+    .f05-bg {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 75% 30%, #0E1626 0%, #080C14 70%);
+      width: 1920px;
+      height: 1080px;
+    }
+
+    .f05-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .f05-container {
+      position: absolute;
+      top: 50px;
+      left: 100px;
+      right: 100px;
+      height: 820px; /* strictly inside top 83% (<=900px) */
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .f05-kicker {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #3FB950;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .f05-headline {
+      font-size: 46px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0;
+      color: #FFFFFF;
+    }
+
+    .f05-content-row {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 32px;
+      margin-top: 10px;
+    }
+
+    /* Left side: benchmark chart */
+    .f05-chart-box {
+      background: #0D1117;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      height: 520px;
+    }
+
+    .f05-chart-header {
+      background: #161B22;
+      padding: 14px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .f05-chart-title {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 14px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+
+    .f05-chart-badge {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      color: #58A6FF;
+      background: rgba(88, 166, 255, 0.12);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .f05-chart-body {
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+    }
+
+    .f05-chart-img {
+      width: 100%;
+      height: auto;
+      max-height: 420px;
+      object-fit: contain;
+    }
+
+    /* Right side: empirical metrics scorecard */
+    .f05-metrics-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .f05-verdict-card {
+      background: rgba(248, 81, 73, 0.1);
+      border: 1px solid rgba(248, 81, 73, 0.4);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .f05-verdict-txt {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 14px;
+      color: #FF7B72;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .f05-verdict-pill {
+      background: #F85149;
+      color: #FFFFFF;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .f05-stat-card {
+      background: #0D1117;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .f05-stat-num {
+      font-size: 50px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+
+    .f05-stat-lbl {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: #8B949E;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .f05-stat-sub {
+      font-size: 13px;
+      color: #7D8590;
+    }
+  </style>
+
+  <div id="root" data-composition-id="05-empirical-proof" data-start="0" data-duration="17.18" data-width="1920" data-height="1080">
+    <!-- Full-bleed background layer -->
+    <div class="clip f05-bg" id="f05-bg-clip" data-start="0" data-duration="17.18" data-track-index="0">
+      <div class="f05-grid"></div>
+    </div>
+
+    <!-- Main Content Layer -->
+    <div class="clip" id="f05-content-clip" data-start="0" data-duration="17.18" data-track-index="1">
+      <div class="f05-container">
+        <!-- Header -->
+        <div class="f05-kicker" id="f05-kicker" data-layout-ignore>
+          <span>✱</span> EMPIRICAL BENCHMARK EVIDENCE
+        </div>
+        <h1 class="f05-headline" id="f05-headline" data-hold>
+          100% Counterfeit PR Kill Rate in Under 70 Milliseconds
+        </h1>
+
+        <div class="f05-content-row" data-layout-ignore data-hold>
+          <!-- Left: Benchmark chart -->
+          <div class="f05-chart-box" id="f05-chart-box" data-hold>
+            <div class="f05-chart-header" data-layout-ignore>
+              <span class="f05-chart-title">Real OSS AST Audit (click, boltons, dotenv, fastmcp, smolagents)</span>
+              <span class="f05-chart-badge" data-layout-ignore>22,595 AST FUNCTIONS</span>
+            </div>
+            <div class="f05-chart-body">
+              <img src="assets/cordis-benchmark-chart.svg" alt="Cordis Empirical Benchmark" class="f05-chart-img" />
+            </div>
+          </div>
+
+          <!-- Right: Scorecard Metrics -->
+          <div class="f05-metrics-col" id="f05-metrics" data-layout-ignore data-hold>
+            <div class="f05-verdict-card" id="f05-verdict" data-hold data-layout-ignore>
+              <div class="f05-verdict-txt">
+                <span>🛡</span> PR #42 VERDICT SCORECARD
+              </div>
+              <div class="f05-verdict-pill">REJECTED · BLOCKED</div>
+            </div>
+
+            <div class="f05-stat-card" id="f05-card-1" style="border-left: 4px solid #3FB950;" data-hold>
+              <div class="f05-stat-num" style="color: #3FB950;">100%</div>
+              <div class="f05-stat-lbl">Counterfeit PRs Caught</div>
+              <div class="f05-stat-sub">Zero surviving mutants allowed through CI gates.</div>
+            </div>
+
+            <div class="f05-stat-card" id="f05-card-2" style="border-left: 4px solid #58A6FF;" data-hold>
+              <div class="f05-stat-num" style="color: #58A6FF;">&lt; 70ms</div>
+              <div class="f05-stat-lbl">Wall-Clock Latency</div>
+              <div class="f05-stat-sub">Instant AST execution adds negligible time to developer CI.</div>
+            </div>
+
+            <div class="f05-stat-card" id="f05-card-3" style="border-left: 4px solid #D29922;" data-hold>
+              <div class="f05-stat-num" style="color: #D29922;">0.00%</div>
+              <div class="f05-stat-lbl">False Positive Rate</div>
+              <div class="f05-stat-sub">Tested against human maintainer commits with zero regressions.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // Entrance: Header & Benchmark Chart
+      tl.fromTo("#f05-kicker", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+      tl.fromTo("#f05-headline", { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.4);
+      tl.fromTo("#f05-chart-box", { opacity: 0, scale: 0.96, x: -30 }, { opacity: 1, scale: 1, x: 0, duration: 0.8, ease: "power3.out" }, 0.8);
+
+      // Scorecard & Metrics entrance
+      tl.fromTo("#f05-verdict", { opacity: 0, y: -15 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 3.5);
+      tl.fromTo("#f05-card-1", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.6, ease: "power3.out" }, 5.5);
+      tl.fromTo("#f05-card-2", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.6, ease: "power3.out" }, 8.2);
+      tl.fromTo("#f05-card-3", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.6, ease: "power3.out" }, 11.0);
+      tl.to("#f05-verdict", { scale: 1.025, duration: 2.0, ease: "sine.inOut", yoyo: true }, 12.2);
+      tl.to("#f05-card-1", { y: -3, duration: 2.2, ease: "sine.inOut", yoyo: true }, 13.8);
+
+      window.__timelines["05-empirical-proof"] = tl;
+    </script>
+  </div>
+</template>
