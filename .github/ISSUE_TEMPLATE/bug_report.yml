@@ -1,0 +1,30 @@
+name: Bug Report
+description: Report a bug, false positive, or gate evasion in Cordis
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting an issue! Please provide as much detail as possible.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of the Bug
+      description: What happened? If a gate failed unexpectedly or produced a false positive, describe it here.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal Reproduction Steps
+      description: Python code, diff snippet, or command used.
+      placeholder: |
+        cordis verify-git --base-ref HEAD~1
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Python & OS Environment
+      placeholder: Python 3.12, Windows 11 / Ubuntu 22.04
+    validations:
+      required: true

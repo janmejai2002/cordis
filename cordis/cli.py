@@ -30,7 +30,7 @@ from cordis.fuzzer import (
 from cordis.git_diff import extract_git_diff, get_git_file_content
 from cordis.html_report import save_html_report, save_markdown_report
 from cordis.mutator import MutationGateReport, run_in_memory_mutation_gate
-from examples.fixproof_killer_demo import (
+from cordis.demo_fixtures import (
     BAD_AGENT_PATCH_SOURCE,
     BAD_AGENT_TEST_SOURCE,
     GOOD_AGENT_TEST_SOURCE,

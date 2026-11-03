@@ -1,0 +1,19 @@
+name: Feature Request / Mutation Operator Suggestion
+description: Propose a new AST invariant check, mutation operator, or framework integration
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Have an idea for a new adversarial check or performance optimization? Let us know!
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Feature or Mutation Operator
+      description: Explain the problem and how this enhancement improves adversarial PR verification.
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example Agent Reward-Hacking Pattern
+      description: Code example showing the agent's counterfeit trick and how Cordis should prosecute it.

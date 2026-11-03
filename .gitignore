@@ -19,5 +19,7 @@ verify_post_release_audit.py
 cordis_roadmap.html
 cordis-roadmap.workflow.json
 docs/cordis-roadmap.workflow.json
+build/
+dist/
 .agent/
 .agents/

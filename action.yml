@@ -1,0 +1,81 @@
+name: 'Cordis Adversarial AI-PR Prosecutor'
+description: 'Independent adversarial verifier that blocks counterfeit AI PRs and surviving AST mutants in CI/CD'
+author: 'Janmejai'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  base-ref:
+    description: 'Base Git reference to diff against (e.g. HEAD~1, origin/main, or PR base commit)'
+    required: false
+    default: 'HEAD~1'
+  output-html:
+    description: 'Path where the visual HTML scorecard should be written'
+    required: false
+    default: 'cordis_report.html'
+  output-md:
+    description: 'Path where the forensic markdown scorecard should be written'
+    required: false
+    default: 'cordis_report.md'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+  fail-on-blocked:
+    description: 'Whether to exit with error code when Cordis blocks a counterfeit or mutated PR'
+    required: false
+    default: 'true'
+
+outputs:
+  verdict:
+    description: 'Prosecution verdict: APPROVED or BLOCKED'
+    value: ${{ steps.prosecute.outputs.verdict }}
+  report-md:
+    description: 'Path to markdown report'
+    value: ${{ inputs.output-md }}
+  report-html:
+    description: 'Path to HTML report'
+    value: ${{ inputs.output-html }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Cordis
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install cordis-verify
+
+    - name: Run Cordis Invariant Prosecutor
+      id: prosecute
+      shell: bash
+      run: |
+        set +e
+        python -m cordis.cli verify-git \
+          --base-ref "${{ inputs.base-ref }}" \
+          --output-html "${{ inputs.output-html }}" \
+          --output-md "${{ inputs.output-md }}" \
+          --github-comment
+        EXIT_CODE=$?
+        
+        if [ $EXIT_CODE -eq 0 ]; then
+          echo "verdict=APPROVED" >> $GITHUB_OUTPUT
+        else
+          echo "verdict=BLOCKED" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ -f "${{ inputs.output-md }}" ]; then
+          cat "${{ inputs.output-md }}" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ inputs.fail-on-blocked }}" = "true" ] && [ $EXIT_CODE -ne 0 ]; then
+          echo "::error::Cordis Prosecutor BLOCKED this pull request due to invariant violations or surviving AST mutants."
+          exit $EXIT_CODE
+        fi
+        exit 0

@@ -8,10 +8,47 @@ version = "0.2.0"
 description = "Cordis: Independent Adversarial AI-PR & AST Invariant Prosecutor"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Janmejai", email = "janmejai2002@gmail.com" }
+]
+keywords = [
+    "ai-agent",
+    "adversarial-testing",
+    "ast-mutation",
+    "mutation-testing",
+    "property-based-testing",
+    "fuzzing",
+    "code-review",
+    "pull-request",
+    "claude-code",
+    "devin",
+    "antigravity",
+    "counterfeit-red",
+    "forge-guard"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Quality Assurance",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "pytest>=7.4.0",
     "hypothesis>=6.80.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/janmejai2002/cordis"
+Documentation = "https://github.com/janmejai2002/cordis#readme"
+Repository = "https://github.com/janmejai2002/cordis.git"
+Issues = "https://github.com/janmejai2002/cordis/issues"
+Changelog = "https://github.com/janmejai2002/cordis/releases"
 
 [project.scripts]
 cordis = "cordis.cli:main"
