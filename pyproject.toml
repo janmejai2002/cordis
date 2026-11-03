@@ -38,7 +38,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
     "pytest>=7.4.0",
     "hypothesis>=6.80.0",
 ]
@@ -52,6 +55,7 @@ Changelog = "https://github.com/janmejai2002/cordis/releases"
 
 [project.scripts]
 cordis = "cordis.cli:main"
+cordis-verify = "cordis.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["cordis*"]
