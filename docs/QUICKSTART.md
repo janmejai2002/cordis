@@ -24,7 +24,7 @@ uvx cordis-verify demo
 
 ## 🚀 Key Commands
 
-### 1. Run the FixProof-Killer Adversarial PR Demo
+### 1. Run the SWE-bench F2P-Killer Adversarial PR Demo
 
 Simulate a live pull request where an AI agent attempts to pass CI using a single-input overfit and a weakened assertion (`assert x is not None`):
 

@@ -1,4 +1,4 @@
-"""FixProof-Killer Demo Scenarios for Cordis Demo (100% Stdlib Runnable)."""
+"""Adversarial PR Demo Scenarios (SWE-bench F2P Killer) for Cordis Demo (100% Stdlib Runnable)."""
 from __future__ import annotations
 
 from cordis.demo_fixtures import (

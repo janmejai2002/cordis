@@ -42,25 +42,28 @@ from cordis.demo_fixtures import (
 
 def format_github_prosecutor_comment(
     pr_title: str,
-    fixproof_revert_passed: bool,
-    gate1_report: Any,
-    gate2_report: Any,
-    gate3_fuzz_report: Any,
-    gate3_bench_report: Any,
+    fixproof_revert_passed: bool = True,
+    gate1_report: Any = None,
+    gate2_report: Any = None,
+    gate3_fuzz_report: Any = None,
+    gate3_bench_report: Any = None,
+    *,
+    swe_bench_revert_passed: Optional[bool] = None,
 ) -> str:
-    overall_passed = (
-        gate1_report.passed
-        and gate2_report.passed
-        and gate3_fuzz_report.passed
-        and gate3_bench_report.passed
-    )
+    g1_pass = getattr(gate1_report, "passed", False)
+    g2_pass = getattr(gate2_report, "passed", False)
+    g3a_pass = getattr(gate3_fuzz_report, "passed", False)
+    g3b_pass = getattr(gate3_bench_report, "passed", False)
+    overall_passed = g1_pass and g2_pass and g3a_pass and g3b_pass
+
+    f2p_passed = swe_bench_revert_passed if swe_bench_revert_passed is not None else fixproof_revert_passed
     status_badge = "✅ **APPROVED TO LAND**" if overall_passed else "🛑 **BLOCKED — COUNTERFEIT RED / REGRESSION DETECTED**"
-    fp_str = "✅ PASSED (Fooled by single-input test!)" if fixproof_revert_passed and not overall_passed else ("✅ PASSED" if fixproof_revert_passed else "❌ FAILED")
+    fp_str = "✅ PASSED (Fooled by single-input test!)" if f2p_passed and not overall_passed else ("✅ PASSED" if f2p_passed else "❌ FAILED")
 
     lines = [
         f"## 🛡️ Cordis Adversarial AI-PR Prosecutor Verdict: {pr_title}",
         f"**Overall Verdict**: {status_badge}",
-        f"**Naive `git revert` Check (FixProof style)**: {fp_str}",
+        f"**SWE-bench `Fail-to-Pass` (`git revert HEAD~1`)**: {fp_str}",
         "",
         "| Prosecution Gate | Status | Telemetry & Evidence |",
         "| :--- | :--- | :--- |",
@@ -131,7 +134,7 @@ def run_demo(
     f_bad = env_bad["parse_discount_tier"]
     f_ref = env_ref["parse_discount_tier"]
 
-    # 1. Run on BAD Agent PR (that fools FixProof's git revert check)
+    # 1. Run on BAD Agent PR (that fools SWE-bench Fail-to-Pass git revert check)
     g1_bad = audit_test_tampering(
         OLD_TEST_SOURCE,
         BAD_AGENT_TEST_SOURCE,
@@ -440,7 +443,7 @@ def run_verify_git(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cordis: Adversarial AI-PR Prosecutor CLI")
     sub = parser.add_subparsers(dest="command")
-    demo_p = sub.add_parser("demo", help="Run the FixProof-Killer Adversarial PR Demo")
+    demo_p = sub.add_parser("demo", help="Run the SWE-bench F2P-Killer Adversarial PR Demo")
     demo_p.add_argument("--github-comment", action="store_true", help="Output GitHub PR Markdown verdict")
     demo_p.add_argument("--output-html", default=None, help="Save dark-mode HTML prosecutor scorecard")
     demo_p.add_argument("--output-md", default=None, help="Save markdown prosecutor scorecard")

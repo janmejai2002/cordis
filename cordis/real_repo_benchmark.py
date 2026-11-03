@@ -6,7 +6,7 @@ Empirically evaluates Cordis on 3 real, widely used pure-Python GitHub repositor
 
 Runs two real experiments per repository:
 - Experiment A: Clean Maintainer Commit Audit (HEAD~1..HEAD) proving zero false positives.
-- Experiment B: Adversarial Agent PR Injection proving FixProof / git-revert failure & Cordis prosecution.
+- Experiment B: Adversarial Agent PR Injection proving SWE-bench Fail-to-Pass (git revert) failure & Cordis prosecution.
 """
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ class AdversarialPRResult:
     test_file: str
     standard_test_passed: bool
     standard_test_ms: float
-    fixproof_revert_passed: bool  # True means FixProof was FOOLED into approving!
+    fixproof_revert_passed: bool  # True means SWE-bench Fail-to-Pass was FOOLED into approving!
     fixproof_ms: float
     cordis_blocked: bool          # True means Cordis caught the counterfeit/overfit!
     cordis_ms: float
@@ -85,6 +85,14 @@ class AdversarialPRResult:
     gate2_total: int
     surviving_mutants: List[str]
     gate3_counterexamples: List[str]
+
+    @property
+    def swe_bench_revert_passed(self) -> bool:
+        return self.fixproof_revert_passed
+
+    @property
+    def swe_bench_ms(self) -> float:
+        return self.fixproof_ms
 
 
 def ensure_repo_cloned(name: str, url: str, cache_dir: Path) -> Path:
@@ -208,7 +216,7 @@ def run_experiment_a_maintainer_audit(repo_name: str, repo_dir: Path) -> Maintai
 
 
 def run_experiment_b_agent_injection(repo_name: str, repo_dir: Path) -> AdversarialPRResult:
-    """Experiment B: Adversarial Agent PR injection to compare Standard Test Runner vs FixProof vs Cordis."""
+    """Experiment B: Adversarial Agent PR injection to compare Standard Test Runner vs SWE-bench Fail-to-Pass vs Cordis."""
     orig_sha = get_git_output(["git", "rev-parse", "HEAD"], cwd=repo_dir)
 
     # Repository-specific realistic agent PR configurations
@@ -331,7 +339,7 @@ def run_experiment_b_agent_injection(repo_name: str, repo_dir: Path) -> Adversar
         t1_std = time.perf_counter()
         standard_passed = (proc_std.returncode == 0)
 
-        # Step 2: Naive git revert (FixProof style)
+        # Step 2: SWE-bench Fail-to-Pass check (git revert HEAD~1)
         t0_fp = time.perf_counter()
         # Revert production file to HEAD~1 while keeping agent's test
         subprocess.run(["git", "checkout", "HEAD~1", "--", source_rel], cwd=str(repo_dir), check=True, capture_output=True)
@@ -339,7 +347,7 @@ def run_experiment_b_agent_injection(repo_name: str, repo_dir: Path) -> Adversar
         # Restore production file to HEAD
         subprocess.run(["git", "checkout", "HEAD", "--", source_rel], cwd=str(repo_dir), check=True, capture_output=True)
         t1_fp = time.perf_counter()
-        # FixProof passes IF the test failed on HEAD~1 (believing the test caught an old bug)
+        # SWE-bench F2P passes IF the test failed on HEAD~1 (believing the test caught an old bug)
         fixproof_revert_passed = (proc_revert_test.returncode != 0)
 
         # Step 3: Cordis Prosecution
@@ -449,9 +457,9 @@ def generate_benchmark_markdown_report(
     lines.extend([
         "",
         "## 3. Experiment B: Adversarial Agent PR Injection Head-to-Head",
-        "Compares **Standard Unit Test Runner**, **Naive `git revert` (FixProof style)**, and **Cordis 3-Gate Prosecutor** against realistic \"Counterfeit Red\" agent patches.",
+        "Compares **Standard Unit Test Runner**, **SWE-bench `Fail-to-Pass` (`git revert HEAD~1`)**, and **Cordis 4-Gate AST Prosecutor** against realistic \"Counterfeit Red\" agent patches.",
         "",
-        "| Target Repository & Function | Adversarial Agent Strategy | Standard Test Runner | Naive `git revert` (FixProof) | Cordis 3-Gate Prosecutor | Forensic Evidence Caught by Cordis |",
+        "| Target Repository & Function | Adversarial Agent Strategy | Standard Test Runner | SWE-bench `Fail-to-Pass` (`git revert`) | Cordis 4-Gate AST Prosecutor | Forensic Evidence Caught by Cordis |",
         "| :--- | :--- | :--- | :--- | :--- | :--- |",
     ])
 
@@ -479,7 +487,7 @@ def generate_benchmark_markdown_report(
     lines.extend([
         "",
         "### Key Forensic Takeaways:",
-        "1. **FixProof / `git revert` is Trivially Fooled**: On all 3 repositories, an adversarial agent writing a hollow or single-input overfitted test completely fooled naive `git revert`. Because the test failed on `HEAD~1`, FixProof marked the counterfeit PR as verified.",
+        "1. **SWE-bench `Fail-to-Pass` (`git revert`) is Trivially Fooled**: On all 3 repositories, an adversarial agent writing a hollow or single-input overfitted test completely fooled SWE-bench Fail-to-Pass validation. Because the test failed on `HEAD~1`, the F2P gate marked the counterfeit PR as verified.",
         "2. **Cordis Catches 100% of Counterfeit Red**: Gate 1 caught weakened assertions and tautologies; Gate 2 caught surviving AST mutants that hollow tests failed to kill; Gate 3A generated boundary counterexamples outside the single test input.",
         "3. **Zero False Positives on Maintainer Commits**: Genuine PRs landed cleanly across all 3 gates in `< 500ms` average latency without external dependencies.",
         "",
@@ -531,7 +539,7 @@ def run_real_repo_benchmark(
         res_b = run_experiment_b_agent_injection(name, repo_dir)
         exp_b_results_list.append(res_b)
         print(f"  • Standard Runner : {'✅ Passed' if res_b.standard_test_passed else '❌ Failed'}")
-        print(f"  • Naive git revert: {'❌ Fooled!' if res_b.fixproof_revert_passed else '✅ Caught'}")
+        print(f"  • SWE-bench F2P revert: {'❌ Fooled!' if res_b.fixproof_revert_passed else '✅ Caught'}")
         print(f"  • Cordis Prosecutor: {'🛑 BLOCKED (Caught!)' if res_b.cordis_blocked else '✅ Allowed'}")
 
     print("\n" + "=" * 80)

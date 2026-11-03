@@ -39,26 +39,26 @@ def generate_html_report(
     verdict_bg = "rgba(16, 185, 129, 0.08)" if overall_passed else "rgba(244, 63, 94, 0.08)"
     verdict_border = "rgba(16, 185, 129, 0.3)" if overall_passed else "rgba(244, 63, 94, 0.3)"
 
-    # FixProof Comparison Note
+    # SWE-bench Fail-to-Pass Comparison Note
     if fixproof_revert_passed and not overall_passed:
         fp_status_html = """
-        <div class="fixproof-pill fooled">
+        <div class="f2p-pill fooled">
             <span class="pill-dot red"></span>
-            <strong>FixProof (git revert) FOOLED:</strong> Checked exit 0 on revert and claimed valid, but missed hollow test &amp; overfitted logic!
+            <strong>SWE-bench Fail-to-Pass (git revert) FOOLED:</strong> Checked exit code != 0 on HEAD~1 and claimed valid, but missed hollow test &amp; overfitted logic!
         </div>
         """
     elif fixproof_revert_passed:
         fp_status_html = """
-        <div class="fixproof-pill ok">
+        <div class="f2p-pill ok">
             <span class="pill-dot green"></span>
-            <strong>FixProof (git revert):</strong> Revert test check passed.
+            <strong>SWE-bench Fail-to-Pass (git revert):</strong> Revert test check passed.
         </div>
         """
     else:
         fp_status_html = """
-        <div class="fixproof-pill failed">
+        <div class="f2p-pill failed">
             <span class="pill-dot red"></span>
-            <strong>FixProof (git revert):</strong> Failed revert check.
+            <strong>SWE-bench Fail-to-Pass (git revert):</strong> Failed revert check.
         </div>
         """
 
@@ -219,7 +219,7 @@ h1 {{
     color: {verdict_badge_color};
     border: 1px solid {verdict_border};
 }}
-.fixproof-pill {{
+.f2p-pill {{
     display: flex;
     align-items: center;
     gap: 8px;
@@ -229,12 +229,12 @@ h1 {{
     border: 1px solid var(--border);
     background: var(--elevated);
 }}
-.fixproof-pill.fooled {{
+.f2p-pill.fooled {{
     border-color: rgba(244, 63, 94, 0.4);
     background: rgba(244, 63, 94, 0.06);
     color: #fca5a5;
 }}
-.fixproof-pill.ok {{
+.f2p-pill.ok {{
     border-color: rgba(16, 185, 129, 0.3);
     background: rgba(16, 185, 129, 0.05);
     color: #a7f3d0;

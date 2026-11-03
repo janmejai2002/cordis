@@ -23,3 +23,8 @@ build/
 dist/
 .agent/
 .agents/
+*LAUNCH*
+*PLAYBOOK*
+*launch*
+*playbook*
+
