@@ -5,13 +5,16 @@
 > **The independent adversarial verifier that prosecutes AI-authored Pull Requests before human review.**  
 > *Zero external dependencies. 100% Python 3.10+ Standard Library. Sub-5ms execution.*
 
+[![PyPI](https://img.shields.io/pypi/v/cordis-verify.svg)](https://pypi.org/project/cordis-verify/)
 [![CI](https://github.com/janmejai2002/cordis/actions/workflows/cordis.yml/badge.svg)](https://github.com/janmejai2002/cordis/actions/workflows/cordis.yml)
-
 [![Standard Library](https://img.shields.io/badge/dependencies-0%20external-brightgreen.svg)](https://docs.python.org/3/)
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
+```bash
+# Instant zero-install interactive demo anywhere:
+uvx cordis-verify demo
+```
 
 ---
 
