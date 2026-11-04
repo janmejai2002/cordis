@@ -839,11 +839,11 @@ def main() -> int:
 
     probe_p = sub.add_parser("probe", help="Run offline zero-token headless AST mutation & pytest probe")
     probe_p.add_argument("--repo", default=".", help="Repository root path (default: .)")
-    probe_p.add_argument("--target", required=True, help="Target source file relative to repo root")
+    probe_p.add_argument("--target", "--source", dest="target", required=True, help="Target source file relative to repo root")
     probe_p.add_argument("--test", required=True, help="Target test file relative to repo root")
-    probe_p.add_argument("--function", default=None, help="Optional function name within target file to mutate")
+    probe_p.add_argument("--function", "--func", dest="function", default=None, help="Optional function name within target file to mutate")
     probe_p.add_argument("--max-mutants", type=int, default=5, help="Maximum number of AST mutants to generate (default: 5)")
-    probe_p.add_argument("--json", dest="output_json", default=None, help="Path to write structured JSON findings")
+    probe_p.add_argument("--json", "--output-json", dest="output_json", default=None, help="Path to write structured JSON findings")
     probe_p.add_argument("--timeout", type=float, default=10.0, help="Test execution timeout in seconds (default: 10.0)")
     probe_p.add_argument("--pytest-args", default=None, help="Optional extra arguments or selectors passed directly to pytest (e.g. '-k test_name' or '-x')")
 
