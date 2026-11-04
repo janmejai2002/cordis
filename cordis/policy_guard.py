@@ -90,6 +90,15 @@ def _discover_governance_files(root: Path) -> List[Path]:
         "readme.rst",
         "readme.txt",
         "readme",
+        "ai_policy.md",
+        "ai-policy.md",
+        "aipolicy.md",
+        "policy.md",
+        "governance.md",
+        "governance.rst",
+        "security.md",
+        "security.rst",
+        "code_of_conduct.md",
     }
     search_dirs = [
         root,

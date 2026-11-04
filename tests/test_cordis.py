@@ -613,6 +613,67 @@ class AddTest(unittest.TestCase):
         self.assertTrue(rep.passed)
         self.assertGreater(rep.killed_mutants, 0)
 
+    def test_mutator_overload_stub_detection_and_bypass(self) -> None:
+        from cordis.mutator import _is_overload_stub, _find_target_function_node
+        import ast
+
+        # 1. Direct unit verification of _is_overload_stub
+        tree = ast.parse("""from typing import overload
+
+@overload
+def process(x: int) -> int: ...
+
+@typing.overload
+def process(x: str) -> str:
+    ...
+
+def process(x: int | str) -> int | str:
+    return x
+""")
+        func_nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
+        self.assertEqual(len(func_nodes), 3)
+        self.assertTrue(_is_overload_stub(func_nodes[0]), "Expected @overload stub to be detected")
+        self.assertTrue(_is_overload_stub(func_nodes[1]), "Expected @typing.overload stub to be detected")
+        self.assertFalse(_is_overload_stub(func_nodes[2]), "Expected real implementation to NOT be classified as stub")
+
+        # 2. Non-overload decorator (e.g. @property, @lru_cache) must NOT be classified as stub
+        tree_decorated = ast.parse("""@property\ndef prop_val(self): return 42\n@lru_cache(maxsize=None)\ndef cached_val(x): return x * 2""")
+        dec_nodes = [n for n in tree_decorated.body if isinstance(n, ast.FunctionDef)]
+        self.assertFalse(_is_overload_stub(dec_nodes[0]), "Non-overload decorator @property must not be stub")
+        self.assertFalse(_is_overload_stub(dec_nodes[1]), "Non-overload decorator @lru_cache must not be stub")
+
+        # 3. Non-Expr single statements (e.g. `pass`, `return x`) and multi-statement functions
+        tree_stmts = ast.parse("""def pass_fn(x): pass\ndef ret_fn(x): return x\ndef multi_with_ellipsis(x):\n    ...\n    return x + 1""")
+        stmt_nodes = [n for n in tree_stmts.body if isinstance(n, ast.FunctionDef)]
+        self.assertFalse(_is_overload_stub(stmt_nodes[0]), "Function with `pass` must not be stub")
+        self.assertFalse(_is_overload_stub(stmt_nodes[1]), "Function with `return x` must not be stub")
+        self.assertFalse(_is_overload_stub(stmt_nodes[2]), "Multi-statement function must not be stub")
+
+        # 4. Ellipsis-only body without decorator
+        tree_ellipsis = ast.parse("""def stub_only(a, b): ...\ndef real_fn(a, b): return a + b""")
+        stubs = [n for n in tree_ellipsis.body if isinstance(n, ast.FunctionDef)]
+        self.assertTrue(_is_overload_stub(stubs[0]))
+        self.assertFalse(_is_overload_stub(stubs[1]))
+
+        # 3. Target function resolution bypasses stubs to locate true runtime implementation
+        target_node = _find_target_function_node(tree, "process")
+        self.assertIsNotNone(target_node)
+        self.assertEqual(target_node.lineno, func_nodes[2].lineno, "Should resolve to true implementation on line 10, not stubs")
+        self.assertFalse(_is_overload_stub(target_node))
+
+        # 4. Class-level overload bypass (e.g. Session.exec in sqlmodel)
+        class_tree = ast.parse("""class Session:
+    @overload
+    def exec(self, statement: Select) -> Result: ...
+
+    def exec(self, statement: Any) -> Any:
+        return self._raw_exec(statement)
+""")
+        class_target = _find_target_function_node(class_tree, "Session.exec")
+        self.assertIsNotNone(class_target)
+        self.assertFalse(_is_overload_stub(class_target))
+        self.assertIn("_raw_exec", ast.unparse(class_target))
+
     def test_mutator_target_function_not_found_returns_empty(self) -> None:
         source = "def real_function(x): return x + 1"
         mutants = generate_ast_mutants(source, target_function="non_existent_func")
@@ -1232,6 +1293,13 @@ def test_empty():
         self.assertEqual(r_zero["total_assertions"], 0)
         self.assertEqual(r_zero["mar"], 2.0)
 
+        # Empty/whitespace string returns valid zeroed dictionary
+        r_empty = calculate_mock_to_assertion_ratio("   \n\t  ")
+        self.assertEqual(r_empty["total_assertions"], 0)
+        self.assertEqual(r_empty["total_mocks"], 0)
+        self.assertEqual(r_empty["mar"], 0.0)
+        self.assertEqual(r_empty["risk_level"], "LOW")
+
         # Zero assertions zero mocks: MAR = 0.0 -> LOW
         empty_src = "def test_empty(): pass\n"
         r_empty = calculate_mock_to_assertion_ratio(empty_src)
@@ -1298,9 +1366,16 @@ def test_a():
             self.assertFalse(rep_perm.ai_banned)
             self.assertFalse(rep_perm.issue_required)
 
-            # 4. Non-existent path returns PERMITTED gracefully
+            # 4. Non-existent path or file path returns PERMITTED gracefully with explanatory advice
             rep_nonexistent = audit_repository_policy(tmppath / "does_not_exist_12345")
             self.assertEqual(rep_nonexistent.status, "PERMITTED")
+            self.assertIn("does not exist or is not a directory", rep_nonexistent.advice)
+
+            file_target = tmppath / "not_a_dir.txt"
+            file_target.write_text("plain file", encoding="utf-8")
+            rep_file = audit_repository_policy(file_target)
+            self.assertEqual(rep_file.status, "PERMITTED")
+            self.assertIn("does not exist or is not a directory", rep_file.advice)
 
     def test_cli_check_policy_subcommand(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1361,6 +1436,107 @@ def test_mult():
             self.assertEqual(findings["zero_token"], True)
             self.assertEqual(findings["llm_tokens_consumed"], 0)
             self.assertIn("mar", findings)
+
+    def test_cli_probe_subcommand_with_pytest_args(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            src_file = tmppath / "math_ops.py"
+            test_file = tmppath / "test_ops.py"
+            json_out = tmppath / "probe_findings.json"
+
+            src_file.write_text("def compute(a, b):\n    return a * b\n", encoding="utf-8")
+
+            test_file.write_text("""import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+from math_ops import compute
+
+def test_fast_mult():
+    assert compute(3, 4) == 12
+
+def test_other():
+    pass
+""", encoding="utf-8")
+
+            ret = run_probe_cli(
+                repo=str(tmppath),
+                target="math_ops.py",
+                test="test_ops.py",
+                function="compute",
+                max_mutants=2,
+                output_json=str(json_out),
+                pytest_args="-k test_fast_mult",
+            )
+            self.assertEqual(ret, 0)
+            self.assertTrue(json_out.is_file())
+            data = json.loads(json_out.read_text(encoding="utf-8"))
+            self.assertEqual(data["pytest_args"], "-k test_fast_mult")
+            self.assertTrue(data["passed"])
+
+    def test_boolop_and_literal_mutations(self) -> None:
+        src = """def check_auth(is_admin, is_owner, active=True):
+    if is_admin and is_owner:
+        return True
+    if is_admin or active:
+        return False
+    return False
+"""
+        mutants = generate_ast_mutants(src, max_mutants=10)
+        descriptions = [m[0] for m in mutants]
+        self.assertTrue(any("Flip `and` to `or`" in d for d in descriptions))
+        self.assertTrue(any("Flip `or` to `and`" in d for d in descriptions))
+        self.assertTrue(any("Flip boolean literal `True` to `False`" in d for d in descriptions))
+
+    def test_policy_guard_expanded_governance_files(self) -> None:
+        from cordis.policy_guard import _discover_governance_files, audit_repository_policy
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            gh_dir = tmppath / ".github"
+            gh_dir.mkdir(parents=True)
+            ai_policy = gh_dir / "AI_POLICY.md"
+            ai_policy.write_text("Strict policy: No AI generated pull requests or code.", encoding="utf-8")
+
+            discovered = _discover_governance_files(tmppath)
+            discovered_names = [p.name.lower() for p in discovered]
+            self.assertIn("ai_policy.md", discovered_names)
+
+            report = audit_repository_policy(tmppath)
+            self.assertEqual(report.status, "BLOCKED_POLICY")
+            self.assertTrue(report.ai_banned)
+
+    def test_mutator_crash_recovery_bak_restoration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            src_file = tmppath / "service.py"
+            test_file = tmppath / "test_service.py"
+            bak_file = tmppath / "service.py.cordis.bak"
+
+            # Simulate an interrupted run: service.py is corrupted/mutated, but bak file has pristine source
+            pristine_source = "def action(x):\n    return x + 10\n"
+            corrupted_source = "def action(x):\n    return x - 9999\n"
+            src_file.write_text(corrupted_source, encoding="utf-8")
+            bak_file.write_text(pristine_source, encoding="utf-8")
+
+            test_file.write_text("""import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+from service import action
+
+def test_action():
+    assert action(5) == 15
+""", encoding="utf-8")
+
+            # run_repo_mutation_gate should detect service.py.cordis.bak, restore service.py, and delete bak
+            report = run_repo_mutation_gate(
+                repo_root=tmppath,
+                source_rel_path="service.py",
+                test_rel_path="test_service.py",
+                target_function="action",
+                max_mutants=1,
+            )
+            self.assertEqual(src_file.read_text(encoding="utf-8"), pristine_source)
+            self.assertFalse(bak_file.exists())
+            self.assertTrue(report.passed)
 
 
 if __name__ == "__main__":

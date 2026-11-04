@@ -703,11 +703,13 @@ def run_probe_cli(
     max_mutants: int = 5,
     output_json: str | None = None,
     timeout: float = 10.0,
+    pytest_args: str | None = None,
 ) -> int:
     """Executes offline, zero-token headless AST mutation & pytest probe."""
     root = Path(repo).resolve()
     target_path = root / target
-    test_path = root / test
+    pure_test_rel = test.split()[0] if " " in test else test
+    test_path = root / pure_test_rel
 
     print("================================================================================")
     print("             CORDIS HEADLESS PROBE: ZERO-TOKEN MUTATION GATE                    ")
@@ -715,6 +717,8 @@ def run_probe_cli(
     print(f"Repository      : {root}")
     print(f"Target Source   : {target}")
     print(f"Test Suite      : {test}")
+    if pytest_args:
+        print(f"Pytest Args     : {pytest_args}")
     if function:
         print(f"Target Function : {function}")
     print(f"Max Mutants     : {max_mutants}")
@@ -743,6 +747,7 @@ def run_probe_cli(
         target_function=function,
         max_mutants=max_mutants,
         timeout=timeout,
+        pytest_args=pytest_args,
     )
 
     print(f"\nTotal Mutants   : {report.total_mutants}")
@@ -769,6 +774,7 @@ def run_probe_cli(
             "target_file": target,
             "test_file": test,
             "target_function": function,
+            "pytest_args": pytest_args,
             "passed": report.passed,
             "total_mutants": report.total_mutants,
             "killed_mutants": report.killed_mutants,
@@ -839,6 +845,7 @@ def main() -> int:
     probe_p.add_argument("--max-mutants", type=int, default=5, help="Maximum number of AST mutants to generate (default: 5)")
     probe_p.add_argument("--json", dest="output_json", default=None, help="Path to write structured JSON findings")
     probe_p.add_argument("--timeout", type=float, default=10.0, help="Test execution timeout in seconds (default: 10.0)")
+    probe_p.add_argument("--pytest-args", default=None, help="Optional extra arguments or selectors passed directly to pytest (e.g. '-k test_name' or '-x')")
 
     args = parser.parse_args()
     if args.command == "benchmark":
@@ -864,6 +871,7 @@ def main() -> int:
             max_mutants=args.max_mutants,
             output_json=args.output_json,
             timeout=args.timeout,
+            pytest_args=args.pytest_args,
         )
     if args.command == "verify-git":
         return run_verify_git(
