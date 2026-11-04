@@ -1,0 +1,31 @@
+﻿diff --git a/tests/test_x509_workload_identity_hardening.py b/tests/test_x509_workload_identity_hardening.py
+index dc967ee..9d87b8b 100644
+--- a/tests/test_x509_workload_identity_hardening.py
++++ b/tests/test_x509_workload_identity_hardening.py
+@@ -420,6 +420,26 @@ async def test_async_x509_honors_millisecond_retry_delay(monkeypatch: pytest.Mon
+     assert delays == [0.25]
+ 
+ 
++def test_sync_x509_retry_delay_boundaries_and_retry_after() -> None:
++    req = httpx2.Request("POST", _TOKEN_URL)
++
++    # Status 500 must retry
++    r500 = httpx2.Response(500, request=req)
++    assert x509_auth._retry_delay(r500, 0) == 0.5
++
++    # Standard retry-after seconds header must return delay
++    r_std = httpx2.Response(429, request=req, headers={"retry-after": "5"})
++    assert x509_auth._retry_delay(r_std, 0) == 5.0
++
++    # Exact boundary MAX_RETRY_AFTER_DELAY must be accepted
++    r_max = httpx2.Response(429, request=req, headers={"retry-after": str(x509_auth.MAX_RETRY_AFTER_DELAY)})
++    assert x509_auth._retry_delay(r_max, 0) == x509_auth.MAX_RETRY_AFTER_DELAY
++
++    # Exceeding MAX_RETRY_AFTER_DELAY must return None
++    r_over = httpx2.Response(429, request=req, headers={"retry-after": str(x509_auth.MAX_RETRY_AFTER_DELAY + 1)})
++    assert x509_auth._retry_delay(r_over, 0) is None
++
++
+ @pytest.mark.parametrize("status_code", [418, 425])
+ def test_sync_x509_honors_explicit_server_retry_requests(monkeypatch: pytest.MonkeyPatch, status_code: int) -> None:
+     def no_sleep(_delay: float) -> None:

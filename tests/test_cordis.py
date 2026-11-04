@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,10 +21,21 @@ from cordis.ast_gate import (
     _is_unittest_assert_call,
     _is_weak_not_none_assert,
     audit_test_tampering,
+    calculate_mock_to_assertion_ratio,
     index_ast_anchors,
+    TestTamperingReport,
 )
+from cordis.policy_guard import audit_repository_policy, PolicyAuditReport
 from cordis.benchmark_suite import format_benchmark_markdown_table, run_benchmark
-from cordis.cli import format_github_prosecutor_comment, main, run_benchmark_cli, run_demo, run_verify_git
+from cordis.cli import (
+    format_github_prosecutor_comment,
+    main,
+    run_benchmark_cli,
+    run_demo,
+    run_verify_git,
+    run_check_policy_cli,
+    run_probe_cli,
+)
 from cordis.forge_guard import audit_forge_guard, is_bot_identity
 from cordis.fuzzer import (
     BenchmarkGateReport,
@@ -1026,7 +1038,329 @@ class ForeignTest(unittest.TestCase):
             )
             self.assertFalse(rep_broken.target_executed)
 
+    def test_reachability_filter_prunes_boundary_mutations(self) -> None:
+        # 1. Chained guard where 0 <= delay <= MAX returns immediately
+        guarded_source = """def clamp(delay, MAX):
+    if math.isfinite(delay) and 0 <= delay <= MAX:
+        return delay
+    if delay > MAX:
+        return MAX
+    return 0.0
+"""
+        mutants = generate_ast_mutants(guarded_source, max_mutants=10)
+        # Should prune 'Boundary shift `>` to `>=`' on line 4
+        boundary_muts = [m for m in mutants if "Boundary shift `>` to `>=`" in m[0]]
+        self.assertEqual(len(boundary_muts), 0, "Expected boundary shift `>` to `>=` to be pruned on guarded branch")
+        # But polarity flip `>` to `<=` MUST be kept
+        flip_muts = [m for m in mutants if "Flip `>` to `<=`" in m[0]]
+        self.assertGreaterEqual(len(flip_muts), 1, "Expected polarity flip `>` to `<=` to be retained")
 
+        # 2. Symmetric: if delay >= MIN returns, prune `<` to `<=` downstream
+        guarded_min_source = """def check_min(delay, MIN):
+    if delay >= MIN:
+        return delay
+    if delay < MIN:
+        return MIN
+    return 0
+"""
+        min_muts = generate_ast_mutants(guarded_min_source, max_mutants=10)
+        min_boundary = [m for m in min_muts if "Boundary shift `<` to `<=`" in m[0]]
+        self.assertEqual(len(min_boundary), 0, "Expected boundary shift `<` to `<=` to be pruned")
+        min_flip = [m for m in min_muts if "Flip `<` to `>=`" in m[0]]
+        self.assertGreaterEqual(len(min_flip), 1, "Expected polarity flip `<` to `>=` to be retained")
+
+        # 3. Unguarded: boundary shift must be generated
+        unguarded_source = """def check(delay, MAX):
+    if delay > MAX:
+        return MAX
+    return delay
+"""
+        un_muts = generate_ast_mutants(unguarded_source, max_mutants=10)
+        un_boundary = [m for m in un_muts if "Boundary shift `>` to `>=`" in m[0]]
+        self.assertGreaterEqual(len(un_boundary), 1, "Expected boundary shift on unguarded branch")
+
+        # 4. Non-terminal preceding branch: do not prune
+        non_terminal_source = """def check(delay, MAX):
+    if delay <= MAX:
+        print("not terminal")
+    if delay > MAX:
+        return MAX
+    return delay
+"""
+        nt_muts = generate_ast_mutants(non_terminal_source, max_mutants=10)
+        nt_boundary = [m for m in nt_muts if "Boundary shift `>` to `>=`" in m[0]]
+        self.assertGreaterEqual(len(nt_boundary), 1, "Expected boundary shift when preceding branch does not terminate")
+
+        # 5. Variable reassigned between guard and check: do not prune
+        reassigned_source = """def check(delay, MAX):
+    if 0 <= delay <= MAX:
+        return delay
+    delay = delay + 1
+    if delay > MAX:
+        return MAX
+    return 0.0
+"""
+        re_muts = generate_ast_mutants(reassigned_source, max_mutants=10)
+        re_boundary = [m for m in re_muts if "Boundary shift `>` to `>=`" in m[0]]
+        self.assertGreaterEqual(len(re_boundary), 1, "Expected boundary shift when variable is reassigned")
+
+    def test_unaryop_mutations_invert_not_and_boolean(self) -> None:
+        source = """def check_ready(ready, active):
+    if not ready:
+        return 0
+    if active:
+        return 1
+    return 2
+"""
+        muts = generate_ast_mutants(source, max_mutants=10)
+        has_not_removed = any("Remove unary `not` inversion" in m[0] for m in muts)
+        has_not_added = any("Invert boolean condition with `not`" in m[0] for m in muts)
+        self.assertTrue(has_not_removed, "Expected unary `not` removal mutant")
+        self.assertTrue(has_not_added, "Expected unary `not` addition mutant")
+
+        # Verify mutated code syntax
+        not_removed_snippet = next(m[2] for m in muts if "Remove unary `not` inversion" in m[0])
+        self.assertIn("if ready:", not_removed_snippet)
+        not_added_snippet = next(m[2] for m in muts if "Invert boolean condition with `not`" in m[0])
+        self.assertIn("if not active:", not_added_snippet)
+
+    def test_compare_identity_and_membership_mutations(self) -> None:
+        source = """def inspect_obj(val, container):
+    if val is None:
+        return -1
+    if val is not 0:
+        pass
+    if val in container:
+        return 1
+    if val not in container:
+        return 2
+    return 0
+"""
+        muts = generate_ast_mutants(source, max_mutants=20)
+        desc_set = {m[0] for m in muts}
+        self.assertTrue(any("Flip `is` to `is not`" in d for d in desc_set))
+        self.assertTrue(any("Flip `is not` to `is`" in d for d in desc_set))
+        self.assertTrue(any("Flip `in` to `not in`" in d for d in desc_set))
+        self.assertTrue(any("Flip `not in` to `in`" in d for d in desc_set))
+
+        # Check snippets
+        is_mut = next(m[2] for m in muts if "Flip `is` to `is not`" in m[0])
+        self.assertIn("val is not None", is_mut)
+        in_mut = next(m[2] for m in muts if "Flip `in` to `not in`" in m[0])
+        self.assertIn("val not in container", in_mut)
+
+    def test_container_subscript_perturbations(self) -> None:
+        source = """def process_items(items):
+    first = items[0]
+    sub = items[0:]
+    last = items[-1]
+    items[0] = 99
+    d = {"k": 0}
+    val = d["k"]
+    return first
+"""
+        muts = generate_ast_mutants(source, max_mutants=10)
+        has_idx = any("Perturb container index `[0]` to `[1]`" in m[0] for m in muts)
+        has_slice = any("Perturb container slice lower bound `[0:]` to `[1:]`" in m[0] for m in muts)
+        self.assertTrue(has_idx, "Expected subscript index perturbation")
+        self.assertTrue(has_slice, "Expected subscript slice perturbation")
+
+        idx_mut = next(m[2] for m in muts if "Perturb container index `[0]` to `[1]`" in m[0])
+        self.assertIn("items[1]", idx_mut)
+        # Store context items[0] = 99 must NOT be mutated to items[1:] = 99
+        self.assertNotIn("items[1:] = 99", idx_mut)
+        # Negative index items[-1] must NOT be mutated
+        self.assertNotIn("items[1:] = items[0]", idx_mut)
+
+    def test_calculate_mock_to_assertion_ratio(self) -> None:
+        # LOW risk: 25 asserts, 2 mocks -> MAR = 2 / 25 = 0.08 < 0.10
+        low_src = """
+def test_healthy():
+    from unittest.mock import Mock
+    m = Mock()
+""" + "\n".join(f"    assert x_{i} == {i}" for i in range(25))
+        r_low = calculate_mock_to_assertion_ratio(low_src)
+        self.assertEqual(r_low["risk_level"], "LOW")
+        self.assertFalse(r_low["is_high_risk"])
+        self.assertLess(r_low["mar"], 0.10)
+
+        # MODERATE risk: 10 asserts, 2 mocks -> MAR = 2 / 10 = 0.20
+        mod_src = """
+from unittest.mock import Mock
+def test_mod():
+    m = Mock()
+    assert 1 == 1
+    assert 2 == 2
+    assert 3 == 3
+    assert 4 == 4
+    assert 5 == 5
+    assert 6 == 6
+    assert 7 == 7
+    assert 8 == 8
+    assert 9 == 9
+    assert 10 == 10
+"""
+        r_mod = calculate_mock_to_assertion_ratio(mod_src)
+        self.assertEqual(r_mod["risk_level"], "MODERATE")
+        self.assertFalse(r_mod["is_high_risk"])
+        self.assertGreaterEqual(r_mod["mar"], 0.10)
+        self.assertLessEqual(r_mod["mar"], 0.25)
+
+        # HIGH_RISK: 10 asserts, 4 mocks -> MAR = 4 / 10 = 0.40
+        high_src = """
+from unittest.mock import Mock, MagicMock, patch
+@patch("module.fn")
+def test_hollow(mock_fn):
+    m1 = Mock()
+    m2 = MagicMock()
+    assert 1 == 1
+    assert 2 == 2
+"""
+        r_high = calculate_mock_to_assertion_ratio(high_src)
+        self.assertEqual(r_high["risk_level"], "HIGH_RISK")
+        self.assertTrue(r_high["is_high_risk"])
+        self.assertGreater(r_high["mar"], 0.25)
+
+        # Zero assertions with mocks: 0 asserts, 2 mocks -> MAR = 2.0 (division by zero safe)
+        zero_assert_src = """
+from unittest.mock import Mock
+def test_empty():
+    m = Mock()
+"""
+        r_zero = calculate_mock_to_assertion_ratio(zero_assert_src)
+        self.assertEqual(r_zero["risk_level"], "HIGH_RISK")
+        self.assertEqual(r_zero["total_assertions"], 0)
+        self.assertEqual(r_zero["mar"], 2.0)
+
+        # Zero assertions zero mocks: MAR = 0.0 -> LOW
+        empty_src = "def test_empty(): pass\n"
+        r_empty = calculate_mock_to_assertion_ratio(empty_src)
+        self.assertEqual(r_empty["risk_level"], "LOW")
+        self.assertEqual(r_empty["mar"], 0.0)
+
+        # with pytest.raises counts as assertion
+        pytest_raises_src = """
+import pytest
+def test_raises():
+    with pytest.raises(ValueError):
+        raise ValueError("error")
+"""
+        r_raises = calculate_mock_to_assertion_ratio(pytest_raises_src)
+        self.assertEqual(r_raises["total_assertions"], 1)
+
+    def test_test_tampering_report_includes_mar(self) -> None:
+        old_test = "def test_a(): assert f(1) == 2\n"
+        new_test = """from unittest.mock import Mock
+def test_a():
+    m = Mock()
+    assert f(1) == 2
+"""
+        rep = audit_test_tampering(old_test, new_test)
+        self.assertTrue(hasattr(rep, "mar"))
+        self.assertTrue(hasattr(rep, "total_mocks"))
+        self.assertTrue(hasattr(rep, "risk_level"))
+        self.assertTrue(hasattr(rep, "mar_risk_level"))
+        self.assertGreater(rep.total_mocks, 0)
+        self.assertGreater(rep.mar, 0.0)
+
+    def test_policy_guard_detection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+
+            # 1. Pallets anti-AI ban in CONTRIBUTING.md
+            (tmppath / "CONTRIBUTING.md").write_text(
+                "# Contributing\nWe do not accept pull requests generated by AI or LLMs. See palletsprojects.com/contributing/llm-ai",
+                encoding="utf-8",
+            )
+            rep_blocked = audit_repository_policy(tmppath)
+            self.assertEqual(rep_blocked.status, "BLOCKED_POLICY")
+            self.assertTrue(rep_blocked.ai_banned)
+            self.assertGreater(len(rep_blocked.citations), 0)
+
+            # 2. Mandatory issue requirement in .github/PULL_REQUEST_TEMPLATE.md
+            (tmppath / "CONTRIBUTING.md").unlink()
+            gh_dir = tmppath / ".github"
+            gh_dir.mkdir(parents=True, exist_ok=True)
+            (gh_dir / "PULL_REQUEST_TEMPLATE.md").write_text(
+                "### Checklist\nAll pull requests must reference an existing issue. Open an issue first before submitting a PR.",
+                encoding="utf-8",
+            )
+            rep_issue = audit_repository_policy(tmppath)
+            self.assertEqual(rep_issue.status, "ISSUE_REQUIRED")
+            self.assertTrue(rep_issue.issue_required)
+            self.assertFalse(rep_issue.ai_banned)
+
+            # 3. Permitted repository
+            (gh_dir / "PULL_REQUEST_TEMPLATE.md").unlink()
+            (tmppath / "README.md").write_text("# My Library\nWelcome to open source contributions!\n", encoding="utf-8")
+            rep_perm = audit_repository_policy(tmppath)
+            self.assertEqual(rep_perm.status, "PERMITTED")
+            self.assertFalse(rep_perm.ai_banned)
+            self.assertFalse(rep_perm.issue_required)
+
+            # 4. Non-existent path returns PERMITTED gracefully
+            rep_nonexistent = audit_repository_policy(tmppath / "does_not_exist_12345")
+            self.assertEqual(rep_nonexistent.status, "PERMITTED")
+
+    def test_cli_check_policy_subcommand(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            json_out = tmppath / "policy_report.json"
+
+            # Permitted repo
+            (tmppath / "CONTRIBUTING.md").write_text("# Welcome\nPRs are warmly welcomed!\n", encoding="utf-8")
+            ret = run_check_policy_cli(repo_dir=str(tmppath), output_json=str(json_out))
+            self.assertEqual(ret, 0)
+            self.assertTrue(json_out.is_file())
+            data = json.loads(json_out.read_text(encoding="utf-8"))
+            self.assertEqual(data["status"], "PERMITTED")
+
+            # Blocked repo
+            (tmppath / "CONTRIBUTING.md").write_text("No AI-generated contributions allowed.", encoding="utf-8")
+            ret_blocked = run_check_policy_cli(repo_dir=str(tmppath), output_json=str(json_out))
+            self.assertEqual(ret_blocked, 1)
+            data_blocked = json.loads(json_out.read_text(encoding="utf-8"))
+            self.assertEqual(data_blocked["status"], "BLOCKED_POLICY")
+
+    def test_cli_probe_subcommand(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            src_file = tmppath / "calc.py"
+            test_file = tmppath / "test_calc.py"
+            json_out = tmppath / "probe_findings.json"
+
+            src_file.write_text("""def multiply(a, b):
+    return a * b
+""", encoding="utf-8")
+
+            # Killer test kills binop_mult mutant
+            test_file.write_text("""import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+from calc import multiply
+
+def test_mult():
+    assert multiply(2, 3) == 6
+    assert multiply(0, 5) == 0
+    assert multiply(4, 2) == 8
+""", encoding="utf-8")
+
+            ret = run_probe_cli(
+                repo=str(tmppath),
+                target="calc.py",
+                test="test_calc.py",
+                function="multiply",
+                max_mutants=2,
+                output_json=str(json_out),
+            )
+            self.assertEqual(ret, 0, "Expected probe to pass when killer test kills mutant")
+            self.assertTrue(json_out.is_file())
+            findings = json.loads(json_out.read_text(encoding="utf-8"))
+            self.assertTrue(findings["passed"])
+            self.assertEqual(findings["survived_mutants"], 0)
+            self.assertEqual(findings["zero_token"], True)
+            self.assertEqual(findings["llm_tokens_consumed"], 0)
+            self.assertIn("mar", findings)
 
 
 if __name__ == "__main__":

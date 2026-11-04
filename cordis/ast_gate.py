@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 
 @dataclass
@@ -25,11 +25,19 @@ class ASTAnchor:
 
 @dataclass
 class TestTamperingReport:
+    __test__ = False
     passed: bool
     old_assert_count: int
     new_assert_count: int
     violations: List[str] = field(default_factory=list)
     anchors: Dict[str, ASTAnchor] = field(default_factory=dict)
+    total_mocks: int = 0
+    mar: float = 0.0
+    risk_level: str = "LOW"
+
+    @property
+    def mar_risk_level(self) -> str:
+        return self.risk_level
 
 
 def compute_node_hash(
@@ -154,6 +162,125 @@ def _is_weak_not_none_assert(node: ast.AST) -> bool:
         if attr == "assertIsNotNone":
             return True
     return False
+
+
+def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
+    """Calculates the Mock-to-Assertion Ratio (MAR) on test source code.
+    Computes MAR = total_mocks / max(total_assertions, 1).
+    Risk badges:
+      - LOW: MAR < 0.10
+      - MODERATE: 0.10 <= MAR <= 0.25
+      - HIGH_RISK: MAR > 0.25
+    """
+    clean_code = source_code.lstrip("\ufeff")
+    if not clean_code.strip():
+        return {
+            "total_assertions": 0,
+            "total_mocks": 0,
+            "mar": 0.0,
+            "risk_level": "LOW",
+            "is_high_risk": False,
+        }
+
+    try:
+        tree = ast.parse(clean_code)
+    except SyntaxError:
+        return {
+            "total_assertions": 0,
+            "total_mocks": 0,
+            "mar": 0.0,
+            "risk_level": "LOW",
+            "is_high_risk": False,
+        }
+
+    total_assertions = 0
+    total_mocks = 0
+
+    mock_class_names = {
+        "Mock",
+        "MagicMock",
+        "AsyncMock",
+        "PropertyMock",
+        "NonCallableMock",
+        "NonCallableMagicMock",
+    }
+    mock_modules = {"unittest.mock", "mock", "pytest_mock"}
+
+    for node in ast.walk(tree):
+        # 1. Assertions
+        if isinstance(node, ast.Assert):
+            total_assertions += 1
+        elif isinstance(node, ast.Call):
+            func = getattr(node, "func", None)
+            name = getattr(func, "attr", None) or getattr(func, "id", None)
+            if isinstance(name, str) and (name.startswith("assert") or name in {"assert_that", "assert_equal", "assert_true", "assert_false"}):
+                total_assertions += 1
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                ctx = item.context_expr
+                if isinstance(ctx, ast.Call):
+                    ctx_str = ast.unparse(ctx.func)
+                    if ctx_str in ("pytest.raises", "raises", "pytest.warns", "warns"):
+                        total_assertions += 1
+
+        # 2. Mock imports
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if any(alias.name == m or alias.name.startswith(m + ".") for m in mock_modules):
+                    total_mocks += 1
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            if any(mod == m or mod.startswith(m + ".") for m in mock_modules):
+                total_mocks += len(node.names)
+            elif mod == "unittest":
+                for alias in node.names:
+                    if alias.name == "mock":
+                        total_mocks += 1
+
+        # 3. Mock instantiations & calls
+        if isinstance(node, ast.Call):
+            func_str = ast.unparse(node.func)
+            func_name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+            if func_name in mock_class_names:
+                total_mocks += 1
+            elif (
+                func_str.startswith("unittest.mock.")
+                or func_str.startswith("mock.")
+                or func_str.startswith("mocker.")
+                or func_str.startswith("monkeypatch.")
+                or func_str == "patch"
+                or func_str.startswith("patch.")
+            ):
+                total_mocks += 1
+
+        # 4. Bare decorators
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    dec_str = ast.unparse(dec)
+                    if (
+                        dec_str == "patch"
+                        or dec_str.startswith("patch.")
+                        or dec_str.startswith("mock.patch")
+                        or dec_str.startswith("unittest.mock.patch")
+                    ):
+                        total_mocks += 1
+
+    mar = round(total_mocks / max(total_assertions, 1), 4)
+    if mar < 0.10:
+        risk_level = "LOW"
+    elif mar <= 0.25:
+        risk_level = "MODERATE"
+    else:
+        risk_level = "HIGH_RISK"
+
+    return {
+        "total_assertions": total_assertions,
+        "total_mocks": total_mocks,
+        "mar": mar,
+        "risk_level": risk_level,
+        "is_high_risk": (risk_level == "HIGH_RISK"),
+    }
 
 
 def audit_test_tampering(
@@ -286,10 +413,14 @@ def audit_test_tampering(
                         )
 
     anchors = index_ast_anchors(new_test_code, file_path=file_path)
+    mar_data = calculate_mock_to_assertion_ratio(clean_new)
     return TestTamperingReport(
         passed=(len(violations) == 0),
         old_assert_count=len(old_asserts),
         new_assert_count=len(new_asserts),
         violations=violations,
         anchors=anchors,
+        total_mocks=mar_data["total_mocks"],
+        mar=mar_data["mar"],
+        risk_level=mar_data["risk_level"],
     )

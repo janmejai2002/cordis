@@ -21,7 +21,8 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
     except Exception:
         pass
 
-from cordis.ast_gate import audit_test_tampering
+import json
+from cordis.ast_gate import audit_test_tampering, calculate_mock_to_assertion_ratio
 from cordis.forge_guard import audit_current_environment
 from cordis.fuzzer import (
     BenchmarkGateReport,
@@ -31,7 +32,8 @@ from cordis.fuzzer import (
 )
 from cordis.git_diff import extract_git_diff, get_git_file_content
 from cordis.html_report import save_html_report, save_markdown_report
-from cordis.mutator import MutationGateReport, run_in_memory_mutation_gate
+from cordis.mutator import MutationGateReport, run_in_memory_mutation_gate, run_repo_mutation_gate
+from cordis.policy_guard import audit_repository_policy, PolicyAuditReport
 from cordis.demo_fixtures import (
     BAD_AGENT_PATCH_SOURCE,
     BAD_AGENT_TEST_SOURCE,
@@ -657,6 +659,142 @@ def run_verify_git(
         return 1
 
 
+def run_check_policy_cli(repo_dir: str, output_json: str | None = None) -> int:
+    """Executes pre-flight repository governance check."""
+    report = audit_repository_policy(repo_dir)
+    print("================================================================================")
+    print("                 CORDIS PRE-FLIGHT REPOSITORY POLICY AUDIT                      ")
+    print("================================================================================")
+    print(f"Target Repository : {Path(repo_dir).resolve()}")
+    print(f"Scanned Files     : {len(report.governance_files_scanned)} files found")
+    for f in report.governance_files_scanned:
+        print(f"  • {f}")
+
+    if report.status == "BLOCKED_POLICY":
+        print("\n🛑 STATUS: BLOCKED_POLICY")
+        print(f"Advice: {report.advice}")
+        print("\nCitations:")
+        for c in report.citations:
+            print(f"  - {c}")
+    elif report.status == "ISSUE_REQUIRED":
+        print("\n⚠️ STATUS: ISSUE_REQUIRED")
+        print(f"Advice: {report.advice}")
+        print("\nCitations:")
+        for c in report.citations:
+            print(f"  - {c}")
+    else:
+        print("\n✅ STATUS: PERMITTED")
+        print(f"Advice: {report.advice}")
+
+    if output_json:
+        out_path = Path(output_json)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+        print(f"\nSaved policy audit report JSON: {out_path.resolve()}")
+
+    return 0 if report.status == "PERMITTED" else 1
+
+
+def run_probe_cli(
+    repo: str,
+    target: str,
+    test: str,
+    function: str | None = None,
+    max_mutants: int = 5,
+    output_json: str | None = None,
+    timeout: float = 10.0,
+) -> int:
+    """Executes offline, zero-token headless AST mutation & pytest probe."""
+    root = Path(repo).resolve()
+    target_path = root / target
+    test_path = root / test
+
+    print("================================================================================")
+    print("             CORDIS HEADLESS PROBE: ZERO-TOKEN MUTATION GATE                    ")
+    print("================================================================================")
+    print(f"Repository      : {root}")
+    print(f"Target Source   : {target}")
+    print(f"Test Suite      : {test}")
+    if function:
+        print(f"Target Function : {function}")
+    print(f"Max Mutants     : {max_mutants}")
+    print(f"Timeout (sec)   : {timeout}")
+    print("Offline Mode    : Zero tokens consumed (100% deterministic AST & pytest)")
+    print("--------------------------------------------------------------------------------")
+
+    # Read test file to compute MAR badge
+    mar_info = {"total_assertions": 0, "total_mocks": 0, "mar": 0.0, "risk_level": "LOW", "is_high_risk": False}
+    if test_path.is_file():
+        try:
+            test_src = test_path.read_text(encoding="utf-8", errors="replace")
+            mar_info = calculate_mock_to_assertion_ratio(test_src)
+            print(
+                f"Test Suite MAR  : {mar_info['mar']:.4f} [{mar_info['risk_level']}] "
+                f"(Mocks: {mar_info['total_mocks']}, Assertions: {mar_info['total_assertions']})"
+            )
+        except Exception as e:
+            print(f"Warning: Failed to compute MAR on test file: {e}")
+
+    # Run repo mutation gate
+    report = run_repo_mutation_gate(
+        repo_root=root,
+        source_rel_path=target,
+        test_rel_path=test,
+        target_function=function,
+        max_mutants=max_mutants,
+        timeout=timeout,
+    )
+
+    print(f"\nTotal Mutants   : {report.total_mutants}")
+    print(f"Killed Mutants  : {report.killed_mutants}")
+    print(f"Survived Mutants: {report.survived_mutants}")
+    print(f"Kill Rate       : {report.kill_rate * 100:.1f}%")
+
+    for res in report.results:
+        status_icon = "💀 KILLED" if res.killed else "🛡️ SURVIVED"
+        print(f"  • Mutant #{res.mutant_id} (line {res.lineno}): {res.description} -> {status_icon}")
+
+    if report.passed and report.total_mutants > 0:
+        print("\n✅ [Probe Verdict]: PASSED — 100% Mutation Kill Rate (No counterfeit/hollow tests).")
+    elif report.total_mutants == 0:
+        print("\n⚠️ [Probe Verdict]: NEUTRAL — No mutable AST nodes found in target.")
+    else:
+        print(f"\n🛑 [Probe Verdict]: FAILED — {report.survived_mutants} mutant(s) survived! Test suite is hollow.")
+
+    if output_json:
+        out_path = Path(output_json)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        findings = {
+            "repo": str(root),
+            "target_file": target,
+            "test_file": test,
+            "target_function": function,
+            "passed": report.passed,
+            "total_mutants": report.total_mutants,
+            "killed_mutants": report.killed_mutants,
+            "survived_mutants": report.survived_mutants,
+            "kill_rate": round(report.kill_rate, 4),
+            "target_executed": report.target_executed,
+            "mutants": [
+                {
+                    "mutant_id": r.mutant_id,
+                    "lineno": r.lineno,
+                    "description": r.description,
+                    "killed": r.killed,
+                    "mutated_code_snippet": r.mutated_code_snippet,
+                }
+                for r in report.results
+            ],
+            "mar": mar_info,
+            "zero_token": True,
+            "llm_tokens_consumed": 0,
+        }
+        out_path.write_text(json.dumps(findings, indent=2), encoding="utf-8")
+        print(f"\nSaved probe findings JSON: {out_path.resolve()}")
+
+    return 0 if (report.passed and report.survived_mutants == 0) else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cordis: Adversarial AI-PR Prosecutor CLI")
     sub = parser.add_subparsers(dest="command")
@@ -688,6 +826,20 @@ def main() -> int:
     ai_p.add_argument("--cache-dir", default=".real_repos_cache", help="Cache directory for cloned repos (default: .real_repos_cache)")
     ai_p.add_argument("--no-docs-update", action="store_true", help="Skip updating REAL_GITHUB_BENCHMARK.md and README.md")
 
+    policy_p = sub.add_parser("check-policy", help="Audit repository governance files for anti-AI bans and issue prerequisites")
+    policy_p.add_argument("repo_path", nargs="?", default=None, help="Path to repository root (positional, default: .)")
+    policy_p.add_argument("--repo", dest="repo_flag", default=None, help="Path to repository root (flag)")
+    policy_p.add_argument("--json", dest="output_json", default=None, help="Path to write structured JSON audit report")
+
+    probe_p = sub.add_parser("probe", help="Run offline zero-token headless AST mutation & pytest probe")
+    probe_p.add_argument("--repo", default=".", help="Repository root path (default: .)")
+    probe_p.add_argument("--target", required=True, help="Target source file relative to repo root")
+    probe_p.add_argument("--test", required=True, help="Target test file relative to repo root")
+    probe_p.add_argument("--function", default=None, help="Optional function name within target file to mutate")
+    probe_p.add_argument("--max-mutants", type=int, default=5, help="Maximum number of AST mutants to generate (default: 5)")
+    probe_p.add_argument("--json", dest="output_json", default=None, help="Path to write structured JSON findings")
+    probe_p.add_argument("--timeout", type=float, default=10.0, help="Test execution timeout in seconds (default: 10.0)")
+
     args = parser.parse_args()
     if args.command == "benchmark":
         return run_benchmark_cli(output_md=args.output_md)
@@ -700,6 +852,19 @@ def main() -> int:
     if args.command == "audit-ai-repos":
         from cordis.ai_repo_audit import run_ai_repo_audit
         return run_ai_repo_audit(cache_dir=args.cache_dir, update_docs=not args.no_docs_update)
+    if args.command == "check-policy":
+        target_repo = args.repo_flag or args.repo_path or "."
+        return run_check_policy_cli(repo_dir=target_repo, output_json=args.output_json)
+    if args.command == "probe":
+        return run_probe_cli(
+            repo=args.repo,
+            target=args.target,
+            test=args.test,
+            function=args.function,
+            max_mutants=args.max_mutants,
+            output_json=args.output_json,
+            timeout=args.timeout,
+        )
     if args.command == "verify-git":
         return run_verify_git(
             base_ref=args.base_ref,

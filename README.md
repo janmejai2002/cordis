@@ -19,10 +19,11 @@ uvx cordis-verify demo
 ---
 
 > ### 📑 Key Project Deliverables
-> - 📄 [**ArXiv Technical Benchmark Paper (`TECHNICAL_REPORT.md`)**](TECHNICAL_REPORT.md) — *"Counterfeit Red: Auditing Reward-Hacking, Hollow Tests, and Surviving AST Mutants in AI-Authored Pull Requests"* (22,595 AST functions evaluated across 6 production repositories).
-> - 📬 [**Verified Upstream Open-Source Test Patches (`upstream_prs/`)**](upstream_prs/) — Unified `git diff` patches for `boltons`, `python-dotenv`, `click`, `fastmcp`, and `smolagents` dropping wild mutant survival to 0% (100% killed).
+> - 📄 [**ArXiv Technical Benchmark Paper (`TECHNICAL_REPORT.md`)**](TECHNICAL_REPORT.md) — *"Counterfeit Red: Auditing Reward-Hacking, Hollow Tests, and Surviving AST Mutants in AI-Authored Pull Requests"* (281,948 AST functions evaluated across 11 production repositories).
+> - 🌐 [**Tier-1 AI Infrastructure Wild Invariant Hunt (`LIVE_HUNT_LEDGER.md`)**](LIVE_HUNT_LEDGER.md) — Comprehensive master ledger auditing 259,353 AST functions & 309,684 assertions across `pydantic-ai`, `instructor`, `anthropic-sdk-python`, `openai-python`, and `litellm`.
+> - 📬 [**10 Verified Upstream Open-Source Test Patches (`upstream_prs/`)**](upstream_prs/) — Unified `git diff` patches for `boltons`, `python-dotenv`, `click`, `fastmcp`, `smolagents`, `pydantic-ai`, `instructor`, `anthropic-sdk-python`, `openai-python`, and `litellm` dropping wild mutant survival to 0% (100% killed).
 > - 🛑 [**Live Blocked Demo PR #1 on GitHub**](https://github.com/janmejai2002/cordis/pull/1) — Live adversarial agent PR prosecuted and blocked with automated forensic scorecard comment.
-> - 🔬 [**Live Open-Source Benchmark Telemetry (`REAL_GITHUB_BENCHMARK.md`)**](REAL_GITHUB_BENCHMARK.md) — Zero-mock empirical telemetry for Experiment A, B, and C.
+> - 🔬 [**Live Open-Source Benchmark Telemetry (`REAL_GITHUB_BENCHMARK.md`)**](REAL_GITHUB_BENCHMARK.md) — Zero-mock empirical telemetry for Experiment A, B, C, D, and E.
 > - 📊 [**Visual HTML Scorecard (`cordis_report.html`)**](cordis_report.html) — Dark-mode browser scorecard for CI/CD demonstration.
 
 ---
@@ -210,6 +211,42 @@ python -m cordis.cli benchmark-repos
 3. **In-Place AST Mutation Catches What Linters and Type Checkers Miss**: In `smolagents/_function_type_hints_utils.py`, `_get_json_schema_type()` survived 4 out of 5 AST mutations (replacing returns with `None` and flipping `==` to `!=`). The agent-written test suite passed cleanly despite the function being completely broken.
 4. **FastMCP and Smolagents Mutation Blind Spots**: In `fastmcp/utilities/timeout.py::normalize_timeout_to_seconds()`, replacing return expressions with `None` survived native tests due to incomplete assertions on None return semantics. In `smolagents/_function_type_hints_utils.py`, `_get_json_schema_type()` suffered an 80.0% mutant survival rate (4 of 5 survived).
 5. **Cordis is the Only Defense Against Counterfeit Agent PRs**: Traditional CI runners and SWE-bench Fail-to-Pass approve these hollow tests. Only Cordis's 4-gate adversarial prosecution catches test tampering, kills hollow tests via AST mutation, and exposes differential counterexamples.
+
+### 6. Experiment E: Tier-1 AI & Developer Infrastructure Wild Invariant Hunt (pydantic-ai, instructor, anthropic-sdk-python, openai-python, litellm)
+
+> **Methodology**: 100% Zero-Synthetic-Bug, Zero-Mocking Autonomous Forensic Audit. Cordis prosecuted 5 industry-defining
+> Tier-1 AI and developer infrastructure repositories across git attribution trails, Gate 1 AST Test-Tampering & Mock-Density
+> forensics, and Gate 2 In-Place AST Mutation Testing (`target_executed == True`) against each repository's official test suite.
+
+#### 6.1 Tier-1 Repository Forensics & Gate 1 AST Metrics
+
+| Repository | Role & Stack | Python Files | AST Functions Indexed | Test Files | Total Assertions | Weak Asserts (`is not None`) | AST Mocks (`@patch`, etc.) | Mock Density | AI Commits (`-n 30`) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **pydantic-ai** | [pydantic/pydantic-ai](https://github.com/pydantic/pydantic-ai)<br>_Pydantic agent framework_ | `2,234` | `62,064` | `1,164` | `64,071` | `2,893` (4.52%) | `2,970` | 4.64% | **5 / 25** (Claude, dependabot, bots) |
+| **instructor** | [567-labs/instructor](https://github.com/567-labs/instructor)<br>_Structured LLM outputs library_ | `605` | `4,219` | `258` | `5,489` | `177` (3.22%) | `461` | 8.40% | **4 / 30** (Cursor Agent) |
+| **anthropic-sdk-python** | [anthropics/anthropic-sdk-python](https://github.com/anthropics/anthropic-sdk-python)<br>_Official Anthropic Python SDK_ | `2,938` | `12,409` | `263` | `14,357` | `116` (0.81%) | `172` | 1.20% | **30 / 30** (100% Claude/SDK bots) |
+| **openai-python** | [openai/openai-python](https://github.com/openai/openai-python)<br>_Official OpenAI Python SDK_ | `2,519` | `13,597` | `385` | `13,645` | `143` (1.05%) | `783` | 5.74% | **3 / 25** (OpenAI SDK bots) |
+| **litellm** | [BerriAI/litellm](https://github.com/BerriAI/litellm)<br>_Universal LLM proxy & router_ | `8,730` | `167,064` | `5,452` | `212,122` | `5,947` (2.80%) | `69,011` | **32.53%** | **7 / 25** (Devin, Claude) |
+| **TOTALS (Exp E)** | **Tier-1 AI Infrastructure Corpus** | **`17,026`** | **`259,353`** | **`7,522`** | **`309,684`** | **`9,276` (3.00%)** | **`73,397`** | **`23.70%`** | **`49 / 135` (36.3%)** |
+
+#### 6.2 Gate 2: Real Surviving AST Mutants in Tier-1 AI Infrastructure
+
+Every surviving mutant below was discovered in **unmodified upstream production code** where Cordis confirmed that the target function is actively called by the upstream test suite (`target_executed == True`), yet when Cordis mutated logic boundaries or return values, **the project's official test suite still exited `0`**!
+
+| Target Repository & Function | Source File & Test File | Upstream Survivors | Root Cause & Real-World Risk | Verified Killer Patch | Post-Patch Kill Rate |
+| :--- | :--- | :---: | :--- | :--- | :---: |
+| **pydantic-ai**<br>`uuid7()` | `pydantic_ai_slim/pydantic_ai/_uuid.py`<br>`tests/test_uuid.py` | 🛑 **3 Survived** | Boundary shifts `<` to `<=`, `>` to `>=`/`<=` on timestamp millisecond checks and sequence counter boundaries. High-frequency same-millisecond generation allowed duplicate timestamp collisions to skip sequence incrementation. | [`06_pydantic_ai.patch`](upstream_prs/patches/06_pydantic_ai.patch) | ✅ **100% Killed** (9/9) |
+| **instructor**<br>`extract_json_from_codeblock()` | `instructor/v2/core/json.py`<br>`tests/v2/test_json_helpers.py` | 🛑 **5 Survived** | Boundary shift `>` to `>=` on `1 MiB` payload limit; `<` to `<=` on `index < consumed` (silently skips index 0); arithmetic mutation `-` to `+` on malformed work budget calculation; boundary shift `>` to `>=` on `MAX_JSON_DEPTH` (128). | [`07_instructor.patch`](upstream_prs/patches/07_instructor.patch) | ✅ **100% Killed** (14/14) |
+| **anthropic-sdk-python**<br>`_sessions_token_from_secret()` | `src/anthropic/lib/environments/_worker.py`<br>`tests/lib/environments/test_worker.py` | 🛑 **1 Survived** | Perturb `return None` to non-None on `if not isinstance(parsed, dict)`. Upstream test suite tested invalid base64 and plaintext (which failed at `json.loads`), but never tested valid base64-encoded JSON primitives/arrays (`["token"]`, `"token"`, `12345`, `true`). | [`08_anthropic_sdk_python.patch`](upstream_prs/patches/08_anthropic_sdk_python.patch) | ✅ **100% Killed** (6/6) |
+| **openai-python**<br>`_retry_delay()` | `src/openai/auth/_x509.py`<br>`tests/test_x509_workload_identity_hardening.py` | 🛑 **3 Survived** | Boundary shift `< 500` to `<= 500` (silently treats HTTP 500 as non-retryable); perturb `return delay` to `None` on standard RFC 7231 `Retry-After` seconds header. Upstream only tested custom millisecond headers (`x-ms-retry-after-ms`), never HTTP 500 or standard seconds headers. | [`09_openai_python.patch`](upstream_prs/patches/09_openai_python.patch) | ✅ **100% Killed** (9/10, 1 equiv) |
+| **litellm**<br>`duration_in_seconds()` | `litellm/litellm_core_utils/duration_parser.py`<br>`tests/unit/litellm_core_utils/test_duration_parser.py` | 🛑 **3 Survived** | **Structural Tautology**: Upstream asserted `assert duration_in_seconds_from(..., d) == duration_in_seconds(d)`, where the wrapper internally calls `duration_in_seconds(d)` for all non-month units (`f(x) == f(x)`). Mutating return values to `None` or mutating `value * 60` to `value / 60` evaluated to `None == None` / `0.5 == 0.5` and survived upstream with 0 failures! | [`10_litellm.patch`](upstream_prs/patches/10_litellm.patch) | ✅ **100% Killed** (10/10) |
+
+#### 6.3 Key Forensic Takeaways from the Tier-1 Audit
+
+1. **The Hollow Tautology Trap (`litellm`)**: In `litellm`, developers wrote tests comparing a higher-level helper to an underlying utility function. Because the helper literally called the utility function under test, the test assertion was an identity tautology `assert f(x) == f(x)`. Mutating seconds and minutes arithmetic survived completely undetected because `None == None` and `0.5 == 0.5`. Cordis's in-place AST mutator exposed this hollow test instantly.
+2. **Stainless Generator vs. Handwritten Logic (`anthropic`, `openai`)**: Both official SDKs use Stainless to generate exhaustive schema models. While the generated code has high test density, **handwritten runtime middleware, auth token extraction, and retry-backoff parsers contain untested boundaries and silent failure paths** (such as silently ignoring HTTP 500 retries).
+3. **Pervasive Mock Density in Agent Frameworks**: LiteLLM exhibits a **32.53% mock density** (69,011 mocks across its test suites), while FastMCP exhibits 43.6%. When mock density climbs past 20%, test runners increasingly test mock configurations rather than actual system invariants.
+4. **All 5 Upstream Patches Verified**: Unified `.patch` files and PR briefs were generated and verified with 100% kill rates against all surviving mutants, ready for upstream integration in [`upstream_prs/`](upstream_prs/).
 
 ---
 
