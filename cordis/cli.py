@@ -7,7 +7,7 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 # Ensure stdout and stderr handle utf-8 safely on Windows
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
@@ -34,6 +34,7 @@ from cordis.git_diff import extract_git_diff, get_git_file_content
 from cordis.html_report import save_html_report, save_markdown_report
 from cordis.mutator import MutationGateReport, run_in_memory_mutation_gate, run_repo_mutation_gate
 from cordis.policy_guard import audit_repository_policy, PolicyAuditReport
+from cordis.repair import synthesize_mutant_killing_test
 from cordis.demo_fixtures import (
     BAD_AGENT_PATCH_SOURCE,
     BAD_AGENT_TEST_SOURCE,
@@ -452,19 +453,21 @@ def run_verify_git(
     github_comment: bool = False,
     output_html: str | None = None,
     output_md: str | None = None,
+    suggest_test: bool = False,
 ) -> int:
     diff_report = extract_git_diff(repo_dir=repo_dir, base_ref=base_ref, target_ref=target_ref)
     if diff_report.error:
         print(f"🛑 [Cordis Git Diff Error]: {diff_report.error}")
         return 1
 
-    print(f"🛡️ Cordis Git Diff Prosecutor: {base_ref} -> {target_ref or 'working tree'}")
+    effective_base = diff_report.base_ref
+    print(f"🛡️ Cordis Git Diff Prosecutor: {effective_base} -> {target_ref or 'working tree'}")
     print(f"  • Modified source files ({len(diff_report.source_files)}): {diff_report.source_files}")
     print(f"  • Modified test files   ({len(diff_report.test_files)}): {diff_report.test_files}")
     print(f"  • Target functions      ({len(diff_report.target_function_names)}): {diff_report.target_function_names}")
 
     if not diff_report.source_files and not diff_report.test_files:
-        print("✅ No Python source or test files modified in this git diff. Verdict: PASS")
+        print("✅ No Python or TypeScript/JavaScript source or test files modified in this git diff. Verdict: PASS")
         return 0
 
     overall_passed = True
@@ -483,13 +486,30 @@ def run_verify_git(
 
     g1_reports = []
     for test_file in diff_report.test_files:
-        old_test_code = get_git_file_content(base_ref, test_file, repo_dir=repo_dir) or ""
+        old_test_code = get_git_file_content(effective_base, test_file, repo_dir=repo_dir) or ""
+        if not old_test_code and not target_ref and effective_base != "HEAD":
+            old_test_code = get_git_file_content("HEAD", test_file, repo_dir=repo_dir) or ""
         if target_ref:
             new_test_code = get_git_file_content(target_ref, test_file, repo_dir=repo_dir) or ""
         else:
             p = Path(repo_dir) / test_file
             new_test_code = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
-        g1 = audit_test_tampering(old_test_code, new_test_code, target_function_names=diff_report.target_function_names)
+
+        if any(test_file.endswith(ext) for ext in (".ts", ".tsx", ".js", ".jsx")):
+            from cordis.ts_gate import audit_ts_test_tampering
+            g1 = audit_ts_test_tampering(
+                old_test_code,
+                new_test_code,
+                target_function_names=diff_report.target_function_names,
+                file_path=test_file,
+            )
+        else:
+            g1 = audit_test_tampering(
+                old_test_code,
+                new_test_code,
+                target_function_names=diff_report.target_function_names,
+                file_path=test_file,
+            )
         g1_reports.append((test_file, g1))
         if not g1.passed:
             overall_passed = False
@@ -498,6 +518,8 @@ def run_verify_git(
     discovered_test_files: list[str] = []
     if diff_report.test_files:
         for test_file in diff_report.test_files:
+            if not test_file.endswith(".py"):
+                continue
             if target_ref:
                 t_code = get_git_file_content(target_ref, test_file, repo_dir=repo_dir)
                 if t_code:
@@ -528,6 +550,8 @@ def run_verify_git(
 
     g2_reports = []
     for src_file in diff_report.source_files:
+        if not src_file.endswith(".py"):
+            continue
         if target_ref:
             src_code = get_git_file_content(target_ref, src_file, repo_dir=repo_dir) or ""
         else:
@@ -554,9 +578,11 @@ def run_verify_git(
     # Gate 3A: Differential Property Fuzzing against base_ref
     g3_fuzz_reports = []
     for func in diff_report.modified_functions:
-        if func.is_test:
+        if func.is_test or not func.file_path.endswith(".py"):
             continue
-        old_file_code = get_git_file_content(base_ref, func.file_path, repo_dir=repo_dir)
+        old_file_code = get_git_file_content(effective_base, func.file_path, repo_dir=repo_dir)
+        if not old_file_code and not target_ref and effective_base != "HEAD":
+            old_file_code = get_git_file_content("HEAD", func.file_path, repo_dir=repo_dir)
         if not old_file_code:
             continue
         p = Path(repo_dir) / func.file_path
@@ -603,6 +629,21 @@ def run_verify_git(
             for m in g2.results:
                 if not m.killed:
                     print(f"    - Surviving mutant: {m.description}")
+            if suggest_test and not g2.passed and g2.survived_mutants > 0:
+                surviving = [m for m in g2.results if not m.killed]
+                if target_ref:
+                    s_code = get_git_file_content(target_ref, s_file, repo_dir=repo_dir) or ""
+                else:
+                    p = Path(repo_dir) / s_file
+                    s_code = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
+                if s_code and fn:
+                    try:
+                        sugg = synthesize_mutant_killing_test(s_code, fn, surviving)
+                        if sugg:
+                            print(f"\n[Cordis Test Suggestion for {s_file}::{fn}]:")
+                            print(sugg)
+                    except Exception as e:
+                        print(f"Warning: Failed to synthesize test repair: {e}")
 
     for s_file, fn, fuzz_rep in g3_fuzz_reports:
         if fuzz_rep.passed:
@@ -626,7 +667,7 @@ def run_verify_git(
     if output_html:
         save_html_report(
             filepath=output_html,
-            pr_title=f"Git Diff Verdict: {base_ref} -> {target_ref or 'working tree'}",
+            pr_title=f"Git Diff Verdict: {effective_base} -> {target_ref or 'working tree'}",
             fixproof_revert_passed=True,
             gate1_report=primary_g1,
             gate2_report=primary_g2,
@@ -638,7 +679,7 @@ def run_verify_git(
 
     if output_md or github_comment:
         md_text = format_github_prosecutor_comment(
-            pr_title=f"Git Diff Verdict: {base_ref} -> {target_ref or 'working tree'}",
+            pr_title=f"Git Diff Verdict: {effective_base} -> {target_ref or 'working tree'}",
             fixproof_revert_passed=True,
             gate1_report=primary_g1,
             gate2_report=primary_g2,
@@ -704,6 +745,7 @@ def run_probe_cli(
     output_json: str | None = None,
     timeout: float = 10.0,
     pytest_args: str | None = None,
+    suggest_test: bool = False,
 ) -> int:
     """Executes offline, zero-token headless AST mutation & pytest probe."""
     root = Path(repo).resolve()
@@ -759,6 +801,26 @@ def run_probe_cli(
         status_icon = "💀 KILLED" if res.killed else "🛡️ SURVIVED"
         print(f"  • Mutant #{res.mutant_id} (line {res.lineno}): {res.description} -> {status_icon}")
 
+    suggested_test_code = ""
+    if suggest_test and report.survived_mutants > 0:
+        surviving = [r for r in report.results if not r.killed]
+        if target_path.is_file():
+            try:
+                src_code = target_path.read_text(encoding="utf-8", errors="replace")
+                suggested_test_code = synthesize_mutant_killing_test(
+                    source_code=src_code,
+                    target_function=function or "",
+                    surviving_mutants=surviving,
+                )
+                if suggested_test_code:
+                    print("\n" + "=" * 80)
+                    print("          CORDIS COUNTEREXAMPLE-GUIDED TEST REPAIR SKELETON                     ")
+                    print("=" * 80)
+                    print(suggested_test_code.strip())
+                    print("=" * 80)
+            except Exception as e:
+                print(f"Warning: Failed to synthesize test repair: {e}")
+
     if report.passed and report.total_mutants > 0:
         print("\n✅ [Probe Verdict]: PASSED — 100% Mutation Kill Rate (No counterfeit/hollow tests).")
     elif report.total_mutants == 0:
@@ -795,10 +857,51 @@ def run_probe_cli(
             "zero_token": True,
             "llm_tokens_consumed": 0,
         }
+        if suggested_test_code:
+            findings["suggested_test"] = suggested_test_code
         out_path.write_text(json.dumps(findings, indent=2), encoding="utf-8")
         print(f"\nSaved probe findings JSON: {out_path.resolve()}")
 
     return 0 if (report.passed and report.survived_mutants == 0) else 1
+
+
+def run_hooks_cli(args: argparse.Namespace, hooks_parser: Optional[argparse.ArgumentParser] = None) -> int:
+    """Dispatches `cordis hooks` subcommands: check-cmd, stop-gate, and install."""
+    from cordis.hooks import (
+        audit_pre_tool_use_command,
+        install_harness_hooks,
+        run_stop_hook_prosecutor,
+    )
+
+    if args.hooks_command == "check-cmd":
+        decision = audit_pre_tool_use_command(args.command_to_check)
+        if not decision.allowed:
+            sys.stderr.write(f"🛑 [Cordis Pre-Tool Guard]: BLOCKED command '{args.command_to_check}'\n")
+            if decision.reason:
+                sys.stderr.write(f"Reason: {decision.reason}\n")
+            return decision.exit_code if decision.exit_code != 0 else 2
+        print(f"✅ [Cordis Pre-Tool Guard]: PERMITTED command '{args.command_to_check}'")
+        return 0
+
+    if args.hooks_command == "stop-gate":
+        return run_stop_hook_prosecutor(
+            repo_dir=args.repo_dir,
+            max_retries=args.max_retries,
+        )
+
+    if args.hooks_command == "install":
+        installed = install_harness_hooks(
+            repo_dir=args.repo_dir,
+            targets=args.targets,
+        )
+        print(f"✅ [Cordis Hooks Installed]: {len(installed)} hook target(s) configured.")
+        for h in installed:
+            print(f"  • {h}")
+        return 0
+
+    if hooks_parser is not None:
+        hooks_parser.print_help()
+    return 1
 
 
 def main() -> int:
@@ -823,6 +926,7 @@ def main() -> int:
     git_p.add_argument("--github-comment", action="store_true", help="Output GitHub PR Markdown verdict")
     git_p.add_argument("--output-html", default=None, help="Save dark-mode HTML prosecutor scorecard")
     git_p.add_argument("--output-md", default=None, help="Save markdown prosecutor scorecard")
+    git_p.add_argument("--suggest-test", action="store_true", help="Synthesize mutant-killing unit test assertions for surviving mutants")
 
     wild_p = sub.add_parser("audit-wild", help="Hunt for real surviving mutants in unmodified open-source repos")
     wild_p.add_argument("--cache-dir", default=".real_repos_cache", help="Cache directory for cloned repos (default: .real_repos_cache)")
@@ -846,6 +950,21 @@ def main() -> int:
     probe_p.add_argument("--json", "--output-json", dest="output_json", default=None, help="Path to write structured JSON findings")
     probe_p.add_argument("--timeout", type=float, default=10.0, help="Test execution timeout in seconds (default: 10.0)")
     probe_p.add_argument("--pytest-args", default=None, help="Optional extra arguments or selectors passed directly to pytest (e.g. '-k test_name' or '-x')")
+    probe_p.add_argument("--suggest-test", action="store_true", help="Synthesize mutant-killing unit test assertions for surviving mutants")
+
+    hooks_p = sub.add_parser("hooks", help="Manage and execute deterministic pre-tool and stop hook guards")
+    hooks_sub = hooks_p.add_subparsers(dest="hooks_command")
+
+    check_cmd_p = hooks_sub.add_parser("check-cmd", help="Audit a tool command before execution")
+    check_cmd_p.add_argument("--command", "-c", dest="command_to_check", required=True, help="Command string to audit")
+
+    stop_gate_p = hooks_sub.add_parser("stop-gate", help="Execute stop hook mutation prosecutor gate on uncommitted diff")
+    stop_gate_p.add_argument("--repo-dir", default=".", help="Repository root directory (default: .)")
+    stop_gate_p.add_argument("--max-retries", type=int, default=3, help="Max retries per AST anchor before tripping circuit breaker (default: 3)")
+
+    install_p = hooks_sub.add_parser("install", help="Install Cordis pre-commit and Claude Code hooks")
+    install_p.add_argument("--repo-dir", default=".", help="Repository root directory (default: .)")
+    install_p.add_argument("--targets", nargs="+", default=["git", "claude"], help="Targets to install hooks for (default: git claude)")
 
     args = parser.parse_args()
     if args.command == "benchmark":
@@ -872,6 +991,7 @@ def main() -> int:
             output_json=args.output_json,
             timeout=args.timeout,
             pytest_args=args.pytest_args,
+            suggest_test=getattr(args, "suggest_test", False),
         )
     if args.command == "verify-git":
         return run_verify_git(
@@ -881,7 +1001,10 @@ def main() -> int:
             github_comment=args.github_comment,
             output_html=args.output_html,
             output_md=args.output_md,
+            suggest_test=getattr(args, "suggest_test", False),
         )
+    if args.command == "hooks":
+        return run_hooks_cli(args, hooks_parser=hooks_p)
     return run_demo(
         github_comment=getattr(args, "github_comment", False),
         output_html=getattr(args, "output_html", None),

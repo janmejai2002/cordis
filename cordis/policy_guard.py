@@ -1,11 +1,12 @@
 """Pre-Flight Repository Governance & Policy Scraper (Anti-AI & Issue Prerequisite Guard)."""
 from __future__ import annotations
 
+import configparser
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List, Set
+from typing import Any, List, Optional, Set
 
 
 @dataclass
@@ -191,11 +192,82 @@ def audit_repository_policy(repo_path: str | Path) -> PolicyAuditReport:
                 citations.append(f"{rel_str}: Matches issue requirement pattern `{snippet}`: \"...{context_snippet}...\"")
                 break
 
+    # Check for hook tampering if .git is a directory
+    hook_tampered = False
+    git_dir = root / ".git"
+    if git_dir.is_dir():
+        # 1. Inspect .git/config for core.hooksPath override
+        git_config_path = git_dir / "config"
+        if git_config_path.is_file():
+            hooks_path_val: Optional[str] = None
+            try:
+                cp = configparser.ConfigParser()
+                cp.read(str(git_config_path), encoding="utf-8")
+                if cp.has_section("core") and "hookspath" in cp["core"]:
+                    hooks_path_val = cp["core"]["hookspath"].strip()
+            except Exception:
+                pass
+
+            if hooks_path_val is None:
+                try:
+                    cfg_text = git_config_path.read_text(encoding="utf-8", errors="replace")
+                    in_core = False
+                    for line in cfg_text.splitlines():
+                        sline = line.strip()
+                        if sline.startswith("[") and sline.endswith("]"):
+                            in_core = (sline.lower() == "[core]")
+                        elif in_core and "=" in sline:
+                            k, v = sline.split("=", 1)
+                            if k.strip().lower() == "hookspath":
+                                hooks_path_val = v.strip().strip("'\"")
+                                break
+                except Exception:
+                    pass
+
+            if hooks_path_val is not None:
+                clean_hp = hooks_path_val.strip().strip("'\"")
+                norm_hp = clean_hp.lower().replace("\\", "/")
+                is_suppressed = (
+                    not clean_hp
+                    or norm_hp in ("/dev/null", "nul", "null", ":", "false", "none", "/dev/zero")
+                    or (not (root / clean_hp).exists() and not Path(clean_hp).exists())
+                )
+                if is_suppressed:
+                    hook_tampered = True
+                    citations.append("[HOOK_TAMPERING]: git core.hooksPath is overridden to invalid/suppressed target")
+
+        # 2. Inspect .git/hooks/pre-commit
+        hook_path = git_dir / "hooks" / "pre-commit"
+        if hook_path.is_file():
+            is_empty = False
+            try:
+                is_empty = (os.path.getsize(hook_path) == 0)
+            except OSError:
+                pass
+
+            is_stripped = False
+            if hasattr(os, "X_OK"):
+                if os.name != "nt":
+                    is_stripped = not os.access(hook_path, os.X_OK)
+                else:
+                    if not os.access(hook_path, os.X_OK):
+                        is_stripped = True
+
+            if is_empty or is_stripped:
+                hook_tampered = True
+                citations.append("[HOOK_TAMPERING]: .git/hooks/pre-commit is stripped of executable permissions or emptied")
+
     if ai_banned:
         status = "BLOCKED_POLICY"
         advice = (
             "Repository governance explicitly prohibits AI/LLM-generated code or pull requests. "
             "Do not submit automated pull requests to this repository."
+        )
+    elif hook_tampered:
+        status = "BLOCKED_POLICY"
+        advice = (
+            "Repository policy violated: git hook tampering or suppression detected. "
+            "Ensure .git/hooks/pre-commit is executable and core.hooksPath is not overridden."
         )
     elif issue_required:
         status = "ISSUE_REQUIRED"

@@ -64,10 +64,19 @@ cordis verify-git [OPTIONS]
 | `--output-html PATH` | String | `None` | Export full dark-mode HTML scorecard. |
 | `--output-md PATH` | String | `None` | Export markdown verdict report (ideal for `$GITHUB_STEP_SUMMARY`). |
 | `--strict-fp` | Flag | `False` | Fail on maintainer PRs if any invariant warnings are raised. |
+| `--suggest-test` | Flag | `False` | When surviving mutants are caught, synthesize copy-pasteable, mutant-killing test assertions using differential constant-harvested input generation. |
+
+#### Polyglot TypeScript / JavaScript Support:
+`verify-git` automatically detects modified TypeScript and JavaScript files (`.ts`, `.tsx`, `.js`, `.jsx`). When test modifications are encountered, it invokes `cordis/ts_gate.py` to audit Jest/Vitest assertions:
+- Identifies transitions from strong equality checks to hollow assertions (`.toBeDefined()`, `.not.toBeNull()`, `.toBeTruthy()`).
+- Flags tautological assertions (`expect(true).toBe(true)`, `expect(1).toBe(1)`).
+- Computes the Mock-to-Assertion Ratio (MAR) across `vi.mock`, `jest.mock`, `vi.spyOn`, and `jest.spyOn`, raising hard blocks if target functions under test are mocked out.
+- Detects newly added skip directives (`it.skip`, `test.skip`, `describe.skip`, `xit`, `xtest`).
+- Synthesizes diff-scoped TypeScript in-place AST mutants (`===` $\leftrightarrow$ `!==`, `<=` $\leftrightarrow$ `<`, `&&` $\leftrightarrow$ `||`, `return null`).
 
 #### Example:
 ```bash
-cordis verify-git --base-ref origin/main --output-md cordis_verdict.md
+cordis verify-git --base-ref origin/main --output-md cordis_verdict.md --suggest-test
 ```
 
 ---
@@ -80,9 +89,9 @@ cordis probe --source PATH --test PATH --func NAME [OPTIONS]
 ```
 
 #### Required Arguments:
-- `--source PATH`: Relative or absolute path to the target Python implementation file.
-- `--test PATH`: Relative or absolute path to the associated test file.
-- `--func NAME`: Exact name of the Python function to mutate and probe.
+- `--source PATH`: Relative or absolute path to the target implementation file (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`).
+- `--test PATH`: Relative or absolute path to the associated test file (`test_*.py`, `*.test.ts`, `*.spec.ts`, etc.).
+- `--func NAME`: Exact name of the function or method to mutate and probe.
 
 #### Options:
 | Flag | Type | Default | Description |
@@ -91,6 +100,10 @@ cordis probe --source PATH --test PATH --func NAME [OPTIONS]
 | `--max-mutants INT` | Integer | `5` | Maximum number of AST mutants to generate and evaluate. |
 | `--timeout SEC` | Float | `10.0` | Maximum test runner execution timeout per mutant in seconds. |
 | `--output-json PATH` | String | `None` | Path to export machine-readable JSON forensic probe report. |
+| `--suggest-test` | Flag | `False` | When surviving mutants are caught, synthesize a copy-pasteable, mutant-killing test function using differential constant-harvested input generation. |
+
+#### Polyglot Prosecution Support:
+`--source` supports both Python (`.py`) and TypeScript/JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`) files. When targeting TypeScript files with associated Jest/Vitest test suites, `probe` applies pure-stdlib AST anchor extraction and in-place mutant evaluation.
 
 #### Example:
 ```bash
@@ -98,7 +111,8 @@ cordis probe \
   --source cordis/policy_guard.py \
   --test tests/test_cordis.py \
   --func audit_repository_policy \
-  --pytest-args "-k test_policy_guard_allowed"
+  --pytest-args "-k test_policy_guard_allowed" \
+  --suggest-test
 ```
 
 ---
@@ -152,6 +166,58 @@ Audits AI-engineered and `CLAUDE.md`-driven repositories for git attribution tra
 ```bash
 cordis audit-ai [OPTIONS]
 ```
+
+---
+
+### 8. `cordis hooks`
+Autonomous agent runtime lifecycle supervisor and pre-commit anti-bypass prosecutor. Protects repository integrity against agent pre-commit bypasses (`git commit --no-verify`), hook tampering, and context compaction eviction.
+
+```bash
+cordis hooks [ACTION] [OPTIONS]
+```
+
+#### Actions:
+
+##### 1. `cordis hooks check-cmd`
+Executes the deterministic `PreToolUse` shell firewall. Evaluates bash and PowerShell command lines to intercept and block circumvention attempts.
+- Syntax:
+  ```bash
+  cordis hooks check-cmd --command "<command-string>"
+  # or short flag
+  cordis hooks check-cmd -c "<command-string>"
+  ```
+- Enforced Policies:
+  - Blocks `git commit --no-verify` (`-n`).
+  - Blocks `git config core.hooksPath` redirection.
+  - Blocks deletion or tampering of `.git/hooks`.
+  - Blocks stash-based pre-commit bypasses (`git stash; git commit`).
+- Exit Codes: Exits with `2` (blocked) if a bypass pattern is detected; exits `0` if safe.
+
+##### 2. `cordis hooks stop-gate`
+Executes the `Stop` lifecycle verification prosecutor before an agent turn terminates or claims completion.
+- Syntax:
+  ```bash
+  cordis hooks stop-gate [--repo-dir <path>] [--max-retries <int>]
+  ```
+- Options:
+  | Flag | Type | Default | Description |
+  | :--- | :--- | :--- | :--- |
+  | `--repo-dir PATH` | String | `.` | Root path of the target git repository. |
+  | `--max-retries INT` | Integer | `3` | Maximum retry attempts before the 3-strike circuit breaker trips. |
+- Diagnostic Format:
+  Emits structured, actionable feedback using Bounded Output Ring Buffering (<30 lines) to avoid context window blowup. Governed by a 3-strike circuit breaker ($K_{\max} = 3$) in episodic state to prevent infinite auto-repair loops.
+
+##### 3. `cordis hooks install`
+Automates configuration and installation of lifecycle hooks across local git and coding agent settings.
+- Syntax:
+  ```bash
+  cordis hooks install [--repo-dir <path>] [--target git|claude|all]
+  ```
+- Options:
+  | Flag | Type | Default | Description |
+  | :--- | :--- | :--- | :--- |
+  | `--repo-dir PATH` | String | `.` | Target repository directory. |
+  | `--target TARGET` | String | `all` | Target environment to install hooks: `git` (`.git/hooks/pre-commit`), `claude` (`.claude/settings.local.json`), or `all`. |
 
 ---
 

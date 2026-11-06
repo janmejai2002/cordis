@@ -5,6 +5,7 @@ and single-token automated merging without dual-custody verification.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -91,7 +92,7 @@ def inspect_git_actor(repo_dir: str | Path = ".", ref: str = "HEAD") -> GitActor
             errors="replace",
             timeout=10,
         )
-        if proc.returncode == 0 and proc.stdout.strip():
+        if proc.returncode == 0:
             parts = proc.stdout.strip().split("\x00")
             if len(parts) >= 5:
                 an, ae, cn, ce, msg = parts[0], parts[1], parts[2], parts[3], parts[4]
@@ -217,3 +218,54 @@ def audit_current_environment(repo_dir: str | Path = ".") -> ForgeGuardReport:
     """Audits current git repository HEAD and environment for Forge Guard compliance."""
     actor_info = inspect_git_actor(repo_dir=repo_dir, ref="HEAD")
     return audit_forge_guard(actor_info=actor_info)
+
+
+def compute_diff_attestation_digest(
+    modified_anchors: dict[str, str],
+    gate2_kill_rate: float = 1.0,
+) -> str:
+    """Computes a deterministic 64-bit (16-hex character) BLAKE2b digest over
+    the lexicographically sorted modified function anchors and Gate 2 kill rate.
+
+    Args:
+        modified_anchors: Mapping from function qualname to anchor tag (¶path#16hex).
+        gate2_kill_rate: Mutation gate kill rate as float (e.g. 1.0).
+
+    Returns:
+        16-hex character lowercase digest string.
+    """
+    if not modified_anchors:
+        payload = f"EMPTY_DIFF:{gate2_kill_rate:.4f}"
+    else:
+        payload = "\n".join(
+            f"{q}:{t}:{gate2_kill_rate:.4f}"
+            for q, t in sorted(modified_anchors.items())
+        )
+    return hashlib.blake2b(payload.encode("utf-8"), digest_size=8).hexdigest().lower()
+
+
+def verify_commit_attestation_trailer(commit_message: str, expected_digest: str) -> bool:
+    """Verifies that the commit message contains a Cordis-Attestation trailer
+    matching expected_digest (case-insensitive).
+
+    Format:
+        Cordis-Attestation: ¶<16hex>
+        or
+        Cordis-Attestation: <16hex>
+
+    Args:
+        commit_message: Git commit message string.
+        expected_digest: 16-hex character attestation digest.
+
+    Returns:
+        True if valid matching attestation trailer found, False otherwise.
+    """
+    if not commit_message or not expected_digest:
+        return False
+    target = expected_digest.strip().lower()
+    pattern = r"Cordis-Attestation:\s*¶?([0-9a-fA-F]{16})(?![0-9a-fA-F])"
+    for match in re.finditer(pattern, commit_message, re.IGNORECASE):
+        if match.group(1).lower() == target:
+            return True
+    return False
+

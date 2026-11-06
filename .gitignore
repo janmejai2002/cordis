@@ -10,6 +10,7 @@ cordis_report.html
 cordis_report.md
 .cordis_ledger.db
 .cordis_memory.db*
+.cordis_attestation.json
 .real_repos_cache/
 *.egg-info/
 *.local_backup
@@ -33,3 +34,5 @@ assets/voice/
 *launch*
 *playbook*
 
+
+downloads/

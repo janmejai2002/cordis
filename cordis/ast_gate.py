@@ -34,10 +34,14 @@ class TestTamperingReport:
     total_mocks: int = 0
     mar: float = 0.0
     risk_level: str = "LOW"
+    internal_mock_count: int = 0
+    boundary_mock_count: int = 0
+    weighted_mar: float = 0.0
 
     @property
     def mar_risk_level(self) -> str:
         return self.risk_level
+
 
 
 def compute_node_hash(
@@ -164,9 +168,34 @@ def _is_weak_not_none_assert(node: ast.AST) -> bool:
     return False
 
 
+BOUNDARY_MOCK_TARGETS = (
+    "urllib",
+    "http",
+    "httpx",
+    "requests",
+    "aiohttp",
+    "socket",
+    "subprocess",
+    "boto3",
+    "time.sleep",
+    "redis",
+    "sqlalchemy",
+    "os.environ",
+)
+
+
+def _is_boundary_target(target_str: str) -> bool:
+    target_clean = target_str.strip("'\"")
+    return any(target_clean == b or target_clean.startswith(b + ".") for b in BOUNDARY_MOCK_TARGETS)
+
+
 def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
     """Calculates the Mock-to-Assertion Ratio (MAR) on test source code.
     Computes MAR = total_mocks / max(total_assertions, 1).
+    Classifies mocks into internal domain mocks vs. external boundary mocks:
+    - boundary mocks: urllib, http, httpx, requests, aiohttp, socket, subprocess, boto3, time.sleep
+    - internal mocks: repository domain logic, relative modules, etc.
+    Computes weighted_mar = (1.0 * internal_mocks + 0.25 * boundary_mocks) / max(total_assertions, 1).
     Risk badges:
       - LOW: MAR < 0.10
       - MODERATE: 0.10 <= MAR <= 0.25
@@ -180,6 +209,9 @@ def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
             "mar": 0.0,
             "risk_level": "LOW",
             "is_high_risk": False,
+            "internal_mock_count": 0,
+            "boundary_mock_count": 0,
+            "weighted_mar": 0.0,
         }
 
     try:
@@ -191,10 +223,15 @@ def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
             "mar": 0.0,
             "risk_level": "LOW",
             "is_high_risk": False,
+            "internal_mock_count": 0,
+            "boundary_mock_count": 0,
+            "weighted_mar": 0.0,
         }
 
     total_assertions = 0
     total_mocks = 0
+    internal_mock_count = 0
+    boundary_mock_count = 0
 
     mock_class_names = {
         "Mock",
@@ -228,14 +265,18 @@ def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
             for alias in node.names:
                 if any(alias.name == m or alias.name.startswith(m + ".") for m in mock_modules):
                     total_mocks += 1
+                    internal_mock_count += 1
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
             if any(mod == m or mod.startswith(m + ".") for m in mock_modules):
-                total_mocks += len(node.names)
+                cnt = len(node.names)
+                total_mocks += cnt
+                internal_mock_count += cnt
             elif mod == "unittest":
                 for alias in node.names:
                     if alias.name == "mock":
                         total_mocks += 1
+                        internal_mock_count += 1
 
         # 3. Mock instantiations & calls
         if isinstance(node, ast.Call):
@@ -243,6 +284,7 @@ def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
             func_name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
             if func_name in mock_class_names:
                 total_mocks += 1
+                internal_mock_count += 1
             elif (
                 func_str.startswith("unittest.mock.")
                 or func_str.startswith("mock.")
@@ -252,6 +294,27 @@ def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
                 or func_str.startswith("patch.")
             ):
                 total_mocks += 1
+                target_str = ""
+                if node.args:
+                    first_arg = node.args[0]
+                    if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                        target_str = first_arg.value
+                    elif isinstance(first_arg, (ast.Name, ast.Attribute)):
+                        target_str = ast.unparse(first_arg)
+                    if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str):
+                        target_str = f"{target_str}.{node.args[1].value}"
+                elif node.keywords:
+                    for kw in node.keywords:
+                        if kw.arg in ("target", "spec"):
+                            if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                                target_str = kw.value.value
+                            elif isinstance(kw.value, (ast.Name, ast.Attribute)):
+                                target_str = ast.unparse(kw.value)
+                            break
+                if _is_boundary_target(target_str):
+                    boundary_mock_count += 1
+                else:
+                    internal_mock_count += 1
 
         # 4. Bare decorators
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -265,8 +328,10 @@ def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
                         or dec_str.startswith("unittest.mock.patch")
                     ):
                         total_mocks += 1
+                        internal_mock_count += 1
 
     mar = round(total_mocks / max(total_assertions, 1), 4)
+    weighted_mar = round((1.0 * internal_mock_count + 0.25 * boundary_mock_count) / max(total_assertions, 1), 4)
     if mar < 0.10:
         risk_level = "LOW"
     elif mar <= 0.25:
@@ -280,7 +345,35 @@ def calculate_mock_to_assertion_ratio(source_code: str) -> dict[str, Any]:
         "mar": mar,
         "risk_level": risk_level,
         "is_high_risk": (risk_level == "HIGH_RISK"),
+        "internal_mock_count": internal_mock_count,
+        "boundary_mock_count": boundary_mock_count,
+        "weighted_mar": weighted_mar,
     }
+
+
+
+def _is_broad_exception_type(node: Optional[ast.AST]) -> bool:
+    """Checks if exception handler catches broad/base exceptions (Exception, BaseException, bare except, or tuples thereof)."""
+    if node is None:
+        return True
+    if isinstance(node, ast.Name) and node.id in ("Exception", "BaseException"):
+        return True
+    if isinstance(node, ast.Attribute) and node.attr in ("Exception", "BaseException"):
+        return True
+    if isinstance(node, ast.Tuple):
+        return any(_is_broad_exception_type(elt) for elt in node.elts)
+    return False
+
+
+def _is_concrete_oracle_node(node: ast.AST) -> bool:
+    """Checks if AST node is a concrete literal oracle (number, string, collection, boolean)."""
+    if isinstance(node, ast.Constant):
+        return node.value is not None
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return True
+    if isinstance(node, ast.Dict):
+        return True
+    return False
 
 
 def audit_test_tampering(
@@ -295,6 +388,9 @@ def audit_test_tampering(
     3. Adding `@pytest.mark.skip`, `@pytest.mark.xfail`, or `@unittest.skip`.
     4. Mocking out the target function under test (`mock.patch('...target_func')`).
     5. Tautological assertions (`assert True`).
+    6. Direct alias tautologies (`a = target(x); b = target(x); assert a == b`).
+    7. Oracle-free call comparisons (`assert wrapper(x) == target(x)` without concrete literal oracles).
+    8. Exception swallowing (`try: target(x) except Exception: pass`).
     """
     target_set = set(target_function_names or [])
     clean_old = old_test_code.lstrip("\ufeff")
@@ -360,11 +456,12 @@ def audit_test_tampering(
     if len(new_asserts) == 0:
         violations.append("Test file contains zero `assert` statements.")
 
-    # Record pre-existing tautologies, skip decorators, and mock calls in old_tree to avoid false positives
+    # Record pre-existing tautologies, skip decorators, mock calls, and try blocks in old_tree to avoid false positives
     old_taut_dumps: set[str] = set()
     old_skip_decorations: set[tuple[str, str]] = set()
     old_skip_calls: set[str] = set()
     old_target_mocks: set[tuple[str, str]] = set()
+    old_try_dumps: set[str] = set()
 
     if clean_old.strip():
         for node in old_asserts:
@@ -380,6 +477,8 @@ def audit_test_tampering(
                 for target_fn in target_set:
                     if target_fn in ast.unparse(node):
                         old_target_mocks.add((target_fn, func_str))
+            elif isinstance(node, ast.Try):
+                old_try_dumps.add(ast.dump(node, include_attributes=False))
 
     for node in new_asserts:
         taut = _is_tautological_assert(node)
@@ -412,6 +511,166 @@ def audit_test_tampering(
                             f"Line {node.lineno}: Test mocks out target function `{target_fn}` via `{func_str}`."
                         )
 
+        # Exception swallowing: try: target(...) except [Exception]: pass
+        if isinstance(node, ast.Try):
+            swallows = False
+            for h in node.handlers:
+                is_broad = _is_broad_exception_type(h.type)
+                is_pass = all(
+                    isinstance(s, ast.Pass)
+                    or (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))
+                    or (isinstance(s, ast.Return) and (s.value is None or (isinstance(s.value, ast.Constant) and s.value.value is None)))
+                    for s in h.body
+                )
+                if is_broad and is_pass:
+                    swallows = True
+                    break
+
+            if swallows:
+                calls = [
+                    c for c in ast.walk(ast.Module(body=node.body, type_ignores=[]))
+                    if isinstance(c, ast.Call)
+                ]
+                matched_target = None
+                if target_set:
+                    for c in calls:
+                        c_str = ast.unparse(c.func)
+                        if any(t == c_str or c_str.endswith("." + t) or t in c_str for t in target_set):
+                            matched_target = c_str
+                            break
+                elif calls:
+                    matched_target = ast.unparse(calls[0].func)
+
+                if matched_target:
+                    dumped = ast.dump(node, include_attributes=False)
+                    if dumped not in old_try_dumps:
+                        violations.append(
+                            f"Line {node.lineno}: Test swallows exceptions via bare/broad except pass wrapping call to `{matched_target}`."
+                        )
+
+    # Dataflow alias tracking & Oracle-free call comparison
+    for fn_name, new_fn in new_funcs.items():
+        all_call_vars: dict[str, ast.Call] = {}
+        target_var_calls: dict[str, tuple[str, str, int]] = {}
+        for node_stmt in ast.walk(new_fn):
+            if isinstance(node_stmt, ast.Assign):
+                if len(node_stmt.targets) == 1 and isinstance(node_stmt.targets[0], ast.Name):
+                    var_name = node_stmt.targets[0].id
+                    if isinstance(node_stmt.value, ast.Call):
+                        c = node_stmt.value
+                        c_str = ast.unparse(c.func)
+                        all_call_vars[var_name] = c
+                        matched = None
+                        if target_set:
+                            for t in target_set:
+                                if t == c_str or c_str.endswith("." + t) or t in c_str:
+                                    matched = t
+                                    break
+                        else:
+                            matched = c_str
+                        if matched:
+                            target_var_calls[var_name] = (ast.dump(c, include_attributes=False), matched, node_stmt.lineno)
+            elif isinstance(node_stmt, ast.AnnAssign):
+                if isinstance(node_stmt.target, ast.Name) and node_stmt.value is not None and isinstance(node_stmt.value, ast.Call):
+                    var_name = node_stmt.target.id
+                    c = node_stmt.value
+                    c_str = ast.unparse(c.func)
+                    all_call_vars[var_name] = c
+                    matched = None
+                    if target_set:
+                        for t in target_set:
+                            if t == c_str or c_str.endswith("." + t) or t in c_str:
+                                matched = t
+                                break
+                    else:
+                        matched = c_str
+                    if matched:
+                        target_var_calls[var_name] = (ast.dump(c, include_attributes=False), matched, node_stmt.lineno)
+
+        fn_asserts = [
+            a for a in ast.walk(new_fn) if (isinstance(a, ast.Assert) or _is_unittest_assert_call(a))
+        ]
+        has_call_comparison = False
+        has_concrete_literal = False
+
+        for a in fn_asserts:
+            left_node = None
+            right_node = None
+            assert_lineno = getattr(a, "lineno", new_fn.lineno)
+            if (
+                isinstance(a, ast.Assert)
+                and isinstance(a.test, ast.Compare)
+            ):
+                if _is_concrete_oracle_node(a.test.left):
+                    has_concrete_literal = True
+                for comp in a.test.comparators:
+                    if _is_concrete_oracle_node(comp):
+                        has_concrete_literal = True
+                if len(a.test.ops) == 1 and len(a.test.comparators) == 1 and isinstance(a.test.ops[0], (ast.Eq, ast.Is)):
+                    left_node = a.test.left
+                    right_node = a.test.comparators[0]
+            elif isinstance(a, ast.Call):
+                func = getattr(a, "func", None)
+                attr = getattr(func, "attr", "") or getattr(func, "id", "")
+                for arg in a.args:
+                    if _is_concrete_oracle_node(arg):
+                        has_concrete_literal = True
+                if attr in ("assertEqual", "assertIs") and len(a.args) >= 2:
+                    left_node = a.args[0]
+                    right_node = a.args[1]
+
+            if left_node is not None and right_node is not None:
+                if _is_concrete_oracle_node(left_node) or _is_concrete_oracle_node(right_node):
+                    has_concrete_literal = True
+
+                # Direct alias tautology checks:
+                if isinstance(left_node, ast.Name) and isinstance(right_node, ast.Name):
+                    v1, v2 = left_node.id, right_node.id
+                    if v1 in target_var_calls and v2 in target_var_calls:
+                        dump1, tgt1, _ = target_var_calls[v1]
+                        dump2, tgt2, _ = target_var_calls[v2]
+                        if dump1 == dump2:
+                            violations.append(
+                                f"Line {assert_lineno}: Direct alias tautology in test `{fn_name}`: "
+                                f"asserting equality between `{v1}` and `{v2}` assigned from identical calls to `{tgt1}`."
+                            )
+                elif isinstance(left_node, ast.Name) and isinstance(right_node, ast.Call):
+                    v1 = left_node.id
+                    if v1 in target_var_calls:
+                        dump1, tgt1, _ = target_var_calls[v1]
+                        dump2 = ast.dump(right_node, include_attributes=False)
+                        if dump1 == dump2:
+                            violations.append(
+                                f"Line {assert_lineno}: Direct alias tautology in test `{fn_name}`: "
+                                f"comparing variable `{v1}` against identical call to `{tgt1}`."
+                            )
+                elif isinstance(left_node, ast.Call) and isinstance(right_node, ast.Name):
+                    v2 = right_node.id
+                    if v2 in target_var_calls:
+                        dump2, tgt2, _ = target_var_calls[v2]
+                        dump1 = ast.dump(left_node, include_attributes=False)
+                        if dump1 == dump2:
+                            violations.append(
+                                f"Line {assert_lineno}: Direct alias tautology in test `{fn_name}`: "
+                                f"comparing variable `{v2}` against identical call to `{tgt2}`."
+                            )
+
+                left_is_call = isinstance(left_node, ast.Call) or (
+                    isinstance(left_node, ast.Name) and left_node.id in all_call_vars
+                )
+                right_is_call = isinstance(right_node, ast.Call) or (
+                    isinstance(right_node, ast.Name) and right_node.id in all_call_vars
+                )
+                if left_is_call and right_is_call:
+                    has_call_comparison = True
+
+        # Check newly added test function for oracle-free dynamic call comparison
+        if fn_name not in old_funcs and fn_name.startswith("test_"):
+            if has_call_comparison and not has_concrete_literal and len(fn_asserts) > 0:
+                violations.append(
+                    f"Line {new_fn.lineno}: New test `{fn_name}` compares dynamic function calls (`assert wrapper(x) == target(x)`) without concrete literal oracles."
+                )
+
     anchors = index_ast_anchors(new_test_code, file_path=file_path)
     mar_data = calculate_mock_to_assertion_ratio(clean_new)
     return TestTamperingReport(
@@ -423,4 +682,7 @@ def audit_test_tampering(
         total_mocks=mar_data["total_mocks"],
         mar=mar_data["mar"],
         risk_level=mar_data["risk_level"],
+        internal_mock_count=mar_data["internal_mock_count"],
+        boundary_mock_count=mar_data["boundary_mock_count"],
+        weighted_mar=mar_data["weighted_mar"],
     )

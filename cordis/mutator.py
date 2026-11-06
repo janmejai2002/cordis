@@ -24,6 +24,7 @@ class MutantResult:
     lineno: int
     killed: bool
     mutated_code_snippet: str
+    mutated_source: str = ""
 
 
 @dataclass
@@ -34,10 +35,12 @@ class MutationGateReport:
     survived_mutants: int
     results: List[MutantResult] = field(default_factory=list)
     target_executed: bool = True
+    wrapper_tautology_detected: bool = False
 
     @property
     def kill_rate(self) -> float:
         return (self.killed_mutants / self.total_mutants) if self.total_mutants > 0 else 0.0
+
 
 
 class _SingleMutantCandidate:
@@ -274,6 +277,151 @@ def _is_boundary_constrained(
     return False
 
 
+class _ResourceCloseElider(ast.NodeTransformer):
+    def __init__(self, target_lineno: int, target_col: int) -> None:
+        self.target_lineno = target_lineno
+        self.target_col = target_col
+        self.applied = False
+
+    def visit_Expr(self, node: ast.Expr) -> ast.AST:
+        if (
+            getattr(node, "lineno", -1) == self.target_lineno
+            and getattr(node, "col_offset", -1) == self.target_col
+            and not self.applied
+        ):
+            self.applied = True
+            pass_node = ast.Pass()
+            ast.copy_location(pass_node, node)
+            return pass_node
+        return self.generic_visit(node)
+
+
+def _collect_arid_ast_nodes(tree: ast.AST) -> set[ast.AST]:
+    """Collects AST nodes that should not be mutated (Google Arid Node policy):
+    - `if __name__ == '__main__':` blocks
+    - `if TYPE_CHECKING:` blocks
+    - Logging, print, and warning calls (`print`, `logger.*`, `logging.*`, `log.*`, `warnings.warn`)
+    """
+    arid_nodes: set[ast.AST] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If):
+            # 1. if __name__ == "__main__":
+            if any(isinstance(sub, ast.Name) and sub.id == "__name__" for sub in ast.walk(node.test)):
+                for child in ast.walk(node):
+                    arid_nodes.add(child)
+            # 2. if TYPE_CHECKING:
+            if any(
+                (isinstance(sub, ast.Name) and sub.id == "TYPE_CHECKING")
+                or (isinstance(sub, ast.Attribute) and sub.attr == "TYPE_CHECKING")
+                for sub in ast.walk(node.test)
+            ):
+                for child in ast.walk(node):
+                    arid_nodes.add(child)
+            # 3. if ... in sys.path / if ... not in sys.path environment guards
+            try:
+                test_str = ast.unparse(node.test)
+                if "sys.path" in test_str:
+                    for child in ast.walk(node):
+                        arid_nodes.add(child)
+            except Exception:
+                pass
+
+        # 3. Logging, print, warnings.warn calls
+        if isinstance(node, ast.Call):
+            is_arid = False
+            func = node.func
+            if isinstance(func, ast.Name) and func.id in ("print", "warn"):
+                is_arid = True
+            elif isinstance(func, ast.Attribute):
+                caller_str = ast.unparse(func)
+                if (
+                    caller_str.startswith("logging.")
+                    or caller_str.startswith("logger.")
+                    or caller_str.startswith("log.")
+                    or caller_str.startswith("warnings.")
+                    or caller_str == "warnings.warn"
+                    or ".logger." in caller_str
+                    or ".log." in caller_str
+                ):
+                    is_arid = True
+            if is_arid:
+                for child in ast.walk(node):
+                    arid_nodes.add(child)
+        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            func = node.value.func
+            if isinstance(func, ast.Name) and func.id in ("print", "warn"):
+                arid_nodes.add(node)
+            elif isinstance(func, ast.Attribute):
+                caller_str = ast.unparse(func)
+                if (
+                    caller_str.startswith("logging.")
+                    or caller_str.startswith("logger.")
+                    or caller_str.startswith("log.")
+                    or caller_str.startswith("warnings.")
+                    or caller_str == "warnings.warn"
+                    or ".logger." in caller_str
+                    or ".log." in caller_str
+                ):
+                    arid_nodes.add(node)
+
+    return arid_nodes
+
+
+def _is_tie_boundary_equivalent(tree: ast.AST, compare_node: ast.Compare) -> bool:
+    """Checks if mutating boundary operator (< <-> <= or > <-> >=) in `compare_node` produces
+    a mathematically equivalent mutant because the condition is of the form:
+      if a < b: return a (or return b)
+      else: return b (or return a)
+    or:
+      return a if a < b else b
+    At the tie boundary a == b, both branches return the identical value, making
+    the boundary shift < <-> <= or > <-> >= mathematically equivalent!
+    """
+    if len(compare_node.ops) != 1 or len(compare_node.comparators) != 1:
+        return False
+
+    op = compare_node.ops[0]
+    if not isinstance(op, (ast.Lt, ast.LtE, ast.Gt, ast.GtE)):
+        return False
+
+    left_str = _expr_to_str(compare_node.left)
+    right_str = _expr_to_str(compare_node.comparators[0])
+    if not left_str or not right_str:
+        return False
+
+    operands_set = {left_str, right_str}
+
+    parent_map: dict[ast.AST, ast.AST] = {}
+    for p in ast.walk(tree):
+        for c in ast.iter_child_nodes(p):
+            parent_map[c] = p
+
+    curr: ast.AST = compare_node
+    while curr in parent_map:
+        p = parent_map[curr]
+        if isinstance(p, ast.IfExp) and p.test is curr:
+            body_str = _expr_to_str(p.body)
+            orelse_str = _expr_to_str(p.orelse)
+            if body_str and orelse_str and {body_str, orelse_str} == operands_set:
+                return True
+        elif isinstance(p, ast.If) and p.test is curr:
+            if p.orelse:
+                ret1_str = None
+                if p.body and isinstance(p.body[-1], ast.Return) and p.body[-1].value is not None:
+                    ret1_str = _expr_to_str(p.body[-1].value)
+                ret2_str = None
+                if isinstance(p.orelse[-1], ast.Return) and p.orelse[-1].value is not None:
+                    ret2_str = _expr_to_str(p.orelse[-1].value)
+                if ret1_str and ret2_str and {ret1_str, ret2_str} == operands_set:
+                    return True
+        curr = p
+
+    return False
+
+
+SECURITY_KWARGS = {"verify", "trust_env", "check_hostname", "strict", "validate"}
+
+
 class _UnaryNotRemover(ast.NodeTransformer):
     def __init__(self, target_lineno: int, target_col: int) -> None:
         self.target_lineno = target_lineno
@@ -313,6 +461,7 @@ def generate_ast_mutants(
     source_code: str,
     target_function: Optional[str] = None,
     max_mutants: int = 5,
+    include_canary: bool = False,
 ) -> List[tuple[str, int, str]]:
     """Generates up to `max_mutants` distinct AST mutations inside `target_function` (or module).
     Returns a list of (description, lineno, mutated_source_code).
@@ -331,6 +480,9 @@ def generate_ast_mutants(
 
     probe_nodes = _find_target_nodes(base_tree)
 
+    # Collect arid nodes to skip mutating per Google Petrovic et al. policy
+    arid_nodes = _collect_arid_ast_nodes(base_tree)
+
     # Collect nodes inside `if __name__ == ...` checks to avoid mutating them
     name_main_nodes: set[ast.AST] = set()
     for node in ast.walk(base_tree):
@@ -343,7 +495,7 @@ def generate_ast_mutants(
     return_constants = {n.value for n in probe_nodes if isinstance(n, ast.Return) and isinstance(n.value, ast.Constant)}
     candidates: List[tuple[int, int, str, str]] = []
     for n in probe_nodes:
-        if n in name_main_nodes:
+        if n in arid_nodes or n in name_main_nodes:
             continue
         if isinstance(n, ast.Compare) and any(
             isinstance(sub, ast.Name) and sub.id == "__name__" for sub in ast.walk(n)
@@ -358,19 +510,19 @@ def generate_ast_mutants(
             elif isinstance(op, ast.NotEq):
                 candidates.append((lineno, col, "compare_neq", "Flip `!=` to `==`"))
             elif isinstance(op, ast.Lt):
-                if not _is_boundary_constrained(base_tree, n, "compare_lt_lte"):
+                if not _is_boundary_constrained(base_tree, n, "compare_lt_lte") and not _is_tie_boundary_equivalent(base_tree, n):
                     candidates.append((lineno, col, "compare_lt_lte", "Boundary shift `<` to `<=`"))
                 candidates.append((lineno, col, "compare_lt", "Flip `<` to `>=`"))
             elif isinstance(op, ast.LtE):
-                if not _is_boundary_constrained(base_tree, n, "compare_lte_lt"):
+                if not _is_boundary_constrained(base_tree, n, "compare_lte_lt") and not _is_tie_boundary_equivalent(base_tree, n):
                     candidates.append((lineno, col, "compare_lte_lt", "Boundary shift `<=` to `<`"))
                 candidates.append((lineno, col, "compare_lte", "Flip `<=` to `>`"))
             elif isinstance(op, ast.Gt):
-                if not _is_boundary_constrained(base_tree, n, "compare_gt_gte"):
+                if not _is_boundary_constrained(base_tree, n, "compare_gt_gte") and not _is_tie_boundary_equivalent(base_tree, n):
                     candidates.append((lineno, col, "compare_gt_gte", "Boundary shift `>` to `>=`"))
                 candidates.append((lineno, col, "compare_gt", "Flip `>` to `<=`"))
             elif isinstance(op, ast.GtE):
-                if not _is_boundary_constrained(base_tree, n, "compare_gte_gt"):
+                if not _is_boundary_constrained(base_tree, n, "compare_gte_gt") and not _is_tie_boundary_equivalent(base_tree, n):
                     candidates.append((lineno, col, "compare_gte_gt", "Boundary shift `>=` to `>`"))
                 candidates.append((lineno, col, "compare_gte", "Flip `>=` to `<`"))
             elif isinstance(op, ast.Is):
@@ -413,6 +565,54 @@ def generate_ast_mutants(
                 candidates.append((lineno, col, "binop_sub", "Flip `-` to `+`"))
             elif isinstance(n.op, ast.Mult):
                 candidates.append((lineno, col, "binop_mult", "Flip `*` to `/`"))
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            num_defaults = len(n.args.defaults)
+            if num_defaults > 0:
+                pos_args = n.args.args[-num_defaults:]
+                for arg_obj, def_val in zip(pos_args, n.args.defaults):
+                    if arg_obj.arg in SECURITY_KWARGS and isinstance(def_val, ast.Constant) and def_val.value is True:
+                        d_lineno = getattr(def_val, "lineno", lineno)
+                        d_col = getattr(def_val, "col_offset", col)
+                        candidates.append((
+                            d_lineno,
+                            d_col,
+                            f"security_kwarg_{arg_obj.arg}",
+                            f"Flip security/validation flag `{arg_obj.arg}=True` to `False`",
+                        ))
+            for arg_obj, def_val in zip(n.args.kwonlyargs, n.args.kw_defaults):
+                if def_val is not None and arg_obj.arg in SECURITY_KWARGS and isinstance(def_val, ast.Constant) and def_val.value is True:
+                    d_lineno = getattr(def_val, "lineno", lineno)
+                    d_col = getattr(def_val, "col_offset", col)
+                    candidates.append((
+                        d_lineno,
+                        d_col,
+                        f"security_kwarg_{arg_obj.arg}",
+                        f"Flip security/validation flag `{arg_obj.arg}=True` to `False`",
+                    ))
+        elif isinstance(n, ast.Call):
+            for kw in n.keywords:
+                if kw.arg in SECURITY_KWARGS and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                    kw_lineno = getattr(kw.value, "lineno", lineno)
+                    kw_col = getattr(kw.value, "col_offset", col)
+                    candidates.append((
+                        kw_lineno,
+                        kw_col,
+                        f"security_kwarg_{kw.arg}",
+                        f"Flip security/validation flag `{kw.arg}=True` to `False`",
+                    ))
+        elif isinstance(n, ast.Expr):
+            call_node = n.value
+            if isinstance(call_node, ast.Await):
+                call_node = call_node.value
+            if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Attribute):
+                method_name = call_node.func.attr
+                if method_name in ("close", "aclose", "release", "shutdown"):
+                    candidates.append((
+                        lineno,
+                        col,
+                        f"resource_close_elision_{method_name}",
+                        f"Elide resource teardown call `.{method_name}()`",
+                    ))
         elif isinstance(n, ast.Return) and n.value is not None:
             if isinstance(n.value, ast.Constant) and isinstance(n.value.value, (int, float)) and not isinstance(n.value.value, bool):
                 candidates.append((lineno, col, "return_const_num", f"Perturb return constant `{n.value.value}`"))
@@ -422,6 +622,8 @@ def generate_ast_mutants(
                 candidates.append((lineno, col, "return_const_none", "Perturb `return None` to non-None"))
             else:
                 candidates.append((lineno, col, "return_none", "Replace return expression with `None`"))
+                if include_canary:
+                    candidates.append((lineno, col, "return_nan_canary", "Replace return with IEEE-754 NaN canary (tautology detector)"))
 
     # Deduplicate and prioritize diverse mutations up to max_mutants
     seen = set()
@@ -432,7 +634,20 @@ def generate_ast_mutants(
             seen.add(key)
             unique_candidates.append(item)
 
-    for lineno, col, kind, desc in unique_candidates[:max_mutants]:
+    selected_candidates = list(unique_candidates[:max_mutants])
+    if include_canary and max_mutants > 1:
+        selected_none_lines = {c[0] for c in selected_candidates if c[2] == "return_none"}
+        for item in unique_candidates[max_mutants:]:
+            if item[2] == "return_nan_canary" and item[0] in selected_none_lines:
+                if len(selected_candidates) >= max_mutants:
+                    for idx in reversed(range(len(selected_candidates))):
+                        if selected_candidates[idx][2] != "return_none":
+                            selected_candidates[idx] = item
+                            break
+                else:
+                    selected_candidates.append(item)
+
+    for lineno, col, kind, desc in selected_candidates:
         tree_copy = copy.deepcopy(base_tree)
         applied = False
 
@@ -444,6 +659,10 @@ def generate_ast_mutants(
             adder = _UnaryNotAdder(lineno, col)
             tree_copy = adder.visit(tree_copy)
             applied = adder.applied
+        elif kind.startswith("resource_close_elision"):
+            elider = _ResourceCloseElider(lineno, col)
+            tree_copy = elider.visit(tree_copy)
+            applied = elider.applied
         else:
             for n in ast.walk(tree_copy):
                 if getattr(n, "lineno", -1) == lineno and getattr(n, "col_offset", -1) == col and not applied:
@@ -528,6 +747,24 @@ def generate_ast_mutants(
                     elif kind == "return_none" and isinstance(n, ast.Return):
                         n.value = ast.Constant(value=None)
                         applied = True
+                    elif kind == "return_nan_canary" and isinstance(n, ast.Return):
+                        n.value = ast.Call(
+                            func=ast.Name(id="float", ctx=ast.Load()),
+                            args=[ast.Constant(value="nan")],
+                            keywords=[],
+                        )
+                        applied = True
+                    elif kind.startswith("security_kwarg_"):
+                        target_kw = kind[len("security_kwarg_"):]
+                        if isinstance(n, ast.Call):
+                            for kw in n.keywords:
+                                if kw.arg == target_kw and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                                    kw.value = ast.Constant(value=False)
+                                    applied = True
+                                    break
+                        elif isinstance(n, ast.Constant) and n.value is True:
+                            n.value = False
+                            applied = True
 
         if applied:
             ast.fix_missing_locations(tree_copy)
@@ -538,18 +775,25 @@ def generate_ast_mutants(
 
 
 
+
 def run_in_memory_mutation_gate(
     source_code: str,
     test_code: str,
     target_function: Optional[str] = None,
     max_mutants: int = 5,
     module_name: Optional[str] = None,
+    include_canary: bool = True,
 ) -> MutationGateReport:
     """Executes all assertions in `test_code` against each AST mutant of `source_code`.
     Works 100% in-process (sub-millisecond) with module-level patching and dataclass
     compatibility for Python 3.10-3.13+, guaranteeing zero Windows file-locking issues.
     """
-    mutants = generate_ast_mutants(source_code, target_function=target_function, max_mutants=max_mutants)
+    mutants = generate_ast_mutants(
+        source_code,
+        target_function=target_function,
+        max_mutants=max_mutants,
+        include_canary=include_canary,
+    )
     if not mutants:
         return MutationGateReport(
             passed=True,
@@ -557,23 +801,11 @@ def run_in_memory_mutation_gate(
             killed_mutants=0,
             survived_mutants=0,
             results=[],
+            wrapper_tautology_detected=False,
         )
 
-    def _emergency_restore():
-        try:
-            if bak_path.is_file():
-                source_full.write_bytes(bak_path.read_bytes())
-                bak_path.unlink()
-        except Exception:
-            pass
-
-    atexit.register(_emergency_restore)
-    try:
-        bak_path.write_bytes(orig_bytes)
-    except Exception:
-        pass
-
     results: List[MutantResult] = []
+    meta_results: List[tuple[str, int, str, bool, bool]] = []
     killed_count = 0
 
     # Extract standalone test functions from test_code
@@ -604,6 +836,7 @@ def run_in_memory_mutation_gate(
         patched_foreign_modules: list[tuple[Any, str, Any]] = []
 
         killed = False
+        killed_by_assertion = False
         try:
             # If target module is known, compile into target_mod.__dict__ as well
             if target_mod is not None:
@@ -646,8 +879,11 @@ def run_in_memory_mutation_gate(
                 result = runner.run(suite)
                 if not result.wasSuccessful():
                     raise AssertionError(f"TestCase {cls.__name__} failed against mutant: {stream.getvalue()}")
+        except AssertionError:
+            killed = True
+            killed_by_assertion = True
         except Exception:
-            # Any AssertionError or runtime exception means the test KILLED the mutant!
+            # Any runtime exception means the test KILLED the mutant!
             killed = True
         finally:
             # Restore any foreign modules patched
@@ -675,8 +911,27 @@ def run_in_memory_mutation_gate(
                 lineno=lineno,
                 killed=killed,
                 mutated_code_snippet=snippet[:120],
+                mutated_source=mutated_src,
             )
         )
+        meta_results.append((desc, lineno, mutated_src, killed, killed_by_assertion))
+
+    # Tautology Canary Detection: if return_none survived while return_nan_canary was killed by AssertionError
+    wrapper_tautology_detected = False
+    survived_none_lines: dict[int, int] = {}
+    for i, (d, lno, src, kld, _) in enumerate(meta_results):
+        if "Replace return expression with `None`" in d and not kld:
+            survived_none_lines[lno] = i
+
+    for d, lno, src, kld, kld_assert in meta_results:
+        if "IEEE-754 NaN canary" in d and kld and kld_assert:
+            if lno in survived_none_lines:
+                wrapper_tautology_detected = True
+                res_idx = survived_none_lines[lno]
+                results[res_idx].description += (
+                    " [WRAPPER TAUTOLOGY DETECTED: Test compares f(x) against itself or a delegating wrapper "
+                    "(None == None passed, NaN != NaN failed)]"
+                )
 
     survived = len(results) - killed_count
     passed = (survived == 0)
@@ -686,7 +941,9 @@ def run_in_memory_mutation_gate(
         killed_mutants=killed_count,
         survived_mutants=survived,
         results=results,
+        wrapper_tautology_detected=wrapper_tautology_detected,
     )
+
 
 
 def inject_coverage_probe(source_code: str, target_function: str) -> Optional[str]:
@@ -729,6 +986,7 @@ def run_repo_mutation_gate(
     max_mutants: int = 5,
     timeout: float = 10.0,
     pytest_args: Optional[str | List[str]] = None,
+    include_canary: bool = True,
 ) -> MutationGateReport:
     """Diff-Scoped AST Mutation Testing for real multi-file repositories.
     Injects mutants directly into `repo_root / source_rel_path` and verifies if `test_rel_path`
@@ -744,6 +1002,7 @@ def run_repo_mutation_gate(
             survived_mutants=0,
             results=[],
             target_executed=False,
+            wrapper_tautology_detected=False,
         )
 
     # 0. Crash-Recovery Check: restore original file from .cordis.bak if previous run was aborted
@@ -758,7 +1017,12 @@ def run_repo_mutation_gate(
     orig_bytes = source_full.read_bytes()
     source_code = orig_bytes.decode("utf-8", errors="replace")
 
-    mutants = generate_ast_mutants(source_code, target_function=target_function, max_mutants=max_mutants)
+    mutants = generate_ast_mutants(
+        source_code,
+        target_function=target_function,
+        max_mutants=max_mutants,
+        include_canary=include_canary,
+    )
     if not mutants:
         is_target_present = False
         if target_function:
@@ -774,6 +1038,7 @@ def run_repo_mutation_gate(
             survived_mutants=0,
             results=[],
             target_executed=is_target_present if target_function else True,
+            wrapper_tautology_detected=False,
         )
 
     env = dict(os.environ)
@@ -852,8 +1117,9 @@ def run_repo_mutation_gate(
         out = (proc.stdout or "") + (proc.stderr or "")
 
         if has_pytest:
-            if proc.returncode in (2, 3, 4, 5) or "INTERNALERROR" in out or "ERROR collecting" in out:
+            if proc.returncode in (2, 3, 4, 5) or ("\nINTERNALERROR" in ("\n" + out)) or ("\nERROR collecting" in ("\n" + out)):
                 return False, proc.returncode, out
+            return True, proc.returncode, out
 
         if not has_pytest and ("Ran 0 tests" in out or "NO TESTS RAN" in out or "Failed to import test module" in out or proc.returncode == 5):
             runner_code = (
@@ -933,8 +1199,9 @@ def run_repo_mutation_gate(
                 lineno=lineno,
                 killed=False,
                 mutated_code_snippet=f"[UNEXECUTED_TARGET] Test suite does not call target function {target_function}",
+                mutated_source=mut_src,
             )
-            for idx, (desc, lineno, _) in enumerate(mutants, start=1)
+            for idx, (desc, lineno, mut_src) in enumerate(mutants, start=1)
         ]
         return MutationGateReport(
             passed=False,
@@ -960,16 +1227,20 @@ def run_repo_mutation_gate(
         pass
 
     results: List[MutantResult] = []
+    meta_results: List[tuple[str, int, str, bool, bool]] = []
     killed_count = 0
 
     try:
         for idx, (desc, lineno, mutated_src) in enumerate(mutants, start=1):
             killed = False
+            killed_by_assertion = False
             try:
                 source_full.write_text(mutated_src, encoding="utf-8")
-                executed, retcode, _ = _execute_test_cycle()
+                executed, retcode, out = _execute_test_cycle()
                 if executed and retcode not in (0, 2):
                     killed = True
+                    if "AssertionError" in out:
+                        killed_by_assertion = True
             except subprocess.TimeoutExpired:
                 killed = True
             except Exception:
@@ -989,8 +1260,10 @@ def run_repo_mutation_gate(
                     lineno=lineno,
                     killed=killed,
                     mutated_code_snippet=snippet[:120],
+                    mutated_source=mutated_src,
                 )
             )
+            meta_results.append((desc, lineno, mutated_src, killed, killed_by_assertion))
     finally:
         try:
             source_full.write_bytes(orig_bytes)
@@ -1005,6 +1278,22 @@ def run_repo_mutation_gate(
             except Exception:
                 pass
 
+    wrapper_tautology_detected = False
+    survived_none_lines: dict[int, int] = {}
+    for i, (d, lno, src, kld, _) in enumerate(meta_results):
+        if "Replace return expression with `None`" in d and not kld:
+            survived_none_lines[lno] = i
+
+    for d, lno, src, kld, kld_assert in meta_results:
+        if "IEEE-754 NaN canary" in d and kld and kld_assert:
+            if lno in survived_none_lines:
+                wrapper_tautology_detected = True
+                res_idx = survived_none_lines[lno]
+                results[res_idx].description += (
+                    " [WRAPPER TAUTOLOGY DETECTED: Test compares f(x) against itself or a delegating wrapper "
+                    "(None == None passed, NaN != NaN failed)]"
+                )
+
     survived = len(results) - killed_count
     return MutationGateReport(
         passed=(survived == 0),
@@ -1013,4 +1302,6 @@ def run_repo_mutation_gate(
         survived_mutants=survived,
         results=results,
         target_executed=True,
+        wrapper_tautology_detected=wrapper_tautology_detected,
     )
+

@@ -48,13 +48,24 @@ class GitDiffReport:
 
 
 def is_test_file(path_str: str) -> bool:
-    """Identifies if a file is a test file based on standard Python conventions."""
+    """Identifies if a file is a test file based on standard Python and TypeScript/JS conventions."""
     p = Path(path_str)
     name = p.name.lower()
-    if name.startswith("test_") or name.endswith("_test.py"):
+    if (
+        name.startswith("test_")
+        or name.endswith("_test.py")
+        or name.endswith(".test.ts")
+        or name.endswith(".spec.ts")
+        or name.endswith(".test.tsx")
+        or name.endswith(".spec.tsx")
+        or name.endswith(".test.js")
+        or name.endswith(".spec.js")
+        or name.endswith(".test.jsx")
+        or name.endswith(".spec.jsx")
+    ):
         return True
     parts = [part.lower() for part in p.parts]
-    if any(part in ("tests", "test") for part in parts):
+    if any(part in ("tests", "test", "__tests__") for part in parts):
         return True
     return False
 
@@ -174,8 +185,11 @@ def parse_git_diff_text(
     report = GitDiffReport(base_ref=base_ref, target_ref=target_ref, raw_diff=diff_text)
     file_lines = parse_unified_diff_hunks(diff_text)
 
+    TS_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx")
+    SUPPORTED_EXTENSIONS = (".py",) + TS_EXTENSIONS
+
     for file_path, lines in file_lines.items():
-        if not file_path.endswith(".py"):
+        if not any(file_path.endswith(ext) for ext in SUPPORTED_EXTENSIONS):
             continue
 
         if is_test_file(file_path):
@@ -199,7 +213,16 @@ def parse_git_diff_text(
         if not content:
             continue
 
-        funcs = find_functions_in_source(content)
+        if file_path.endswith(".py"):
+            funcs = find_functions_in_source(content)
+        else:
+            from cordis.ts_gate import index_ts_ast_anchors
+            ts_anchors = index_ts_ast_anchors(content, file_path=file_path)
+            funcs = [
+                (a.identifier, a.scope_path, a.lineno, a.end_lineno)
+                for a in ts_anchors.values()
+            ]
+
         file_is_test = is_test_file(file_path)
         for name, scope, start_line, end_line in funcs:
             func_line_range = set(range(start_line, end_line + 1))
@@ -210,7 +233,7 @@ def parse_git_diff_text(
                         file_path=file_path,
                         lineno=start_line,
                         end_lineno=end_line,
-                        is_test=file_is_test or name.startswith("test_"),
+                        is_test=file_is_test or name.startswith("test_") or name.startswith("it_") or name.startswith("test"),
                         scope=scope,
                     )
                 )

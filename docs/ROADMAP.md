@@ -32,27 +32,33 @@ Cordis is transforming from a Python-focused AST invariant prosecutor into the *
 
 ---
 
-## ⚡ Wave 2: Frontier AST Operators & Deep Protocols (Q3 2026) — *In Progress*
+## ⚡ Wave 2: Frontier AST Operators & Deep Protocols (Q3 2026) — *Completed & Verified*
 
 ### 1. Transport Stream Lifecycle & Async Resource Auditing
 - **Context**: In HTTP client and streaming libraries (`httpx`, `aiohttp`, `urllib3`), agents frequently mock response bodies without verifying connection release (`stream.close()` / `stream.aclose()`).
-- **Milestone**: Introduce dedicated lifecycle visitor for `SyncByteStream` and `AsyncByteStream` protocols to enforce context manager and teardown assertion verification.
+- **Milestone**: Completed in `cordis/stream_gate.py` (`StreamLifecycleSpy`, `EphemeralSQLiteSandbox`) and `cordis/mutator.py` (`resource_close_elision`), enforcing context manager and teardown assertion verification.
+- **Status**: [x] *Completed & Verified*
 
 ### 2. Multi-Hop Buffer Boundary Probing (`CHUNK_SIZE`)
 - **Context**: Implementations using internal chunking constants (e.g. `CHUNK_SIZE = 65_536`) often survive tests because tests pass trivial single-chunk inputs (e.g. 13-byte strings).
-- **Milestone**: Automated heuristic synthesis in Gate 3 detecting buffer constants and exercising multi-hop chunk boundary conditions ($x > 2 \times \text{CHUNK\_SIZE}$).
+- **Milestone**: Completed in `cordis/fuzzer.py` (`harvest_ast_constants()`), extracting buffer constants and automatically injecting multi-hop boundary values $\{C - 1, C, C + 1, 2C + 1\}$ into Gate 3 fuzzing pools.
+- **Status**: [x] *Completed & Verified*
 
 ### 3. Security Parameter Default Invariants
 - **Context**: Mutations on security-critical constructor flags (`trust_env=True` $\rightarrow$ `False`, `verify=True` $\rightarrow$ `False`) frequently survive when tests rely on mock responses.
-- **Milestone**: Automated parameter default mutation tracking for cryptographic, SSL, and network environment defaults.
+- **Milestone**: Completed in `cordis/mutator.py` (`security_kwarg_flip`), auditing and mutating cryptographic, SSL, and network environment defaults to force explicit assertion verification.
+- **Status**: [x] *Completed & Verified*
 
 ---
 
-## 🌐 Wave 3: Polyglot Multi-Language Prosecution (Q4 2026)
+## 🌐 Wave 3: Polyglot Multi-Language Prosecution (Q4 2026) — *Wave 3.1 Completed & Verified*
 
-- [ ] **TypeScript / JavaScript AST Gate (Node & Bun)**:
-  - Zero-external-dependency TypeScript AST parsing via native tree traversal.
-  - Detection of Jest/Vitest hollow assertions (`expect(val).toBeDefined()`) and `@jest/mock` abuse.
+- [x] **TypeScript / JavaScript AST Gate (Node & Bun) — *Completed & Verified (Q4 2026)***:
+  - 100% Python Standard Library zero-dependency lexical scanner and comment/string masker in `cordis/ts_gate.py`.
+  - 64-bit cryptographic BLAKE2b function anchors (`¶file.ts#16hex`) for top-level, arrow, and class methods.
+  - Jest/Vitest test-tampering detection: catches weakened assertions (`.toBeDefined()`, `.not.toBeNull()`, `.toBeTruthy()`), tautologies (`expect(true).toBe(true)`), mock abuse (`vi.mock`, `jest.spyOn`), and skip annotations (`it.skip`, `xit`).
+  - In-place diff-scoped TypeScript mutant synthesis (`===` $\leftrightarrow$ `!==`, `<=` $\leftrightarrow$ `<`, `&&` $\leftrightarrow$ `||`, `return null;`).
+  - Integrated into `cordis verify-git` and `cordis probe`.
 - [ ] **Rust Invariant Engine (`cargo-cordis`)**:
   - Trait boundary mutation and property fuzzing integration via `cargo-fuzz`.
 - [ ] **Go AST Prosecutor (`go/ast`)**:
@@ -62,8 +68,8 @@ Cordis is transforming from a Python-focused AST invariant prosecutor into the *
 
 ## 🧠 Wave 4: Continuous Autonomous Invariant Synthesis (2027)
 
-- [ ] **Counterexample-Driven Auto-Repair**:
-  - When Cordis discovers an agent's test is hollow or overfitted, synthesize the exact missing assertion patch automatically.
+- [x] **Counterexample-Driven Auto-Repair (`--suggest-test`) — *Completed & Shipped***:
+  - When Gate 2 identifies surviving AST mutants, counterexample-guided test repair (`cordis/repair.py::synthesize_mutant_killing_test()`) evaluates `f_orig` vs `f_mutant` across constant-harvested boundary inputs and synthesizes copy-pasteable, mutant-killing test assertions.
 - [ ] **GitHub Marketplace App (1-Click Bot)**:
   - Frictionless 1-click GitHub App installation for public and private organizations.
 - [ ] **Decentralized Invariant Ledger**:
