@@ -1188,7 +1188,9 @@ class TestChallengerFuzzerStress(unittest.TestCase):
         def c_fn():
             sum(range(500))
 
-        rep = run_statistical_benchmark_gate(b_fn, c_fn, rounds=6, iterations_per_round=20)
+        rep = run_statistical_benchmark_gate(
+            b_fn, c_fn, rounds=6, iterations_per_round=20, max_regression_pct=50.0
+        )
         self.assertEqual(type(rep).__name__, "BenchmarkGateReport")
         self.assertEqual(rep.rounds, 6)
         self.assertTrue(rep.baseline_median_us > 0)

@@ -476,7 +476,7 @@ cordis/
 │   └── WILD_HUNT_LEDGER.md     # Master ledger of Tier-1 AI infrastructure audits
 ├── examples/                   # Standalone runnable demonstration scripts
 │   ├── adversarial_pr_demo.py
-│   └── fixproof_killer_demo.py
+│   └── counterfeit_killer_demo.py
 ├── tests/                      # Comprehensive test suite (46 unit & stress tests)
 │   ├── test_cordis.py
 │   └── test_stress_challenger.py

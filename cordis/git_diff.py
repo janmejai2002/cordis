@@ -281,6 +281,16 @@ def extract_git_diff(
         if check.returncode != 0:
             actual_base = "HEAD"
 
+    if target_ref:
+        mb_check = subprocess.run(
+            ["git", "merge-base", actual_base, target_ref],
+            cwd=str(repo_dir),
+            capture_output=True,
+            text=True,
+        )
+        if mb_check.returncode == 0 and mb_check.stdout.strip():
+            actual_base = mb_check.stdout.strip()
+
     cmd = ["git", "diff", actual_base]
     if target_ref:
         cmd.append(target_ref)

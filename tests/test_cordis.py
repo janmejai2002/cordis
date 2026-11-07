@@ -69,7 +69,7 @@ from cordis.git_diff import GitDiffReport, ModifiedFunction, extract_git_diff, i
 from cordis.html_report import generate_html_report, save_html_report, save_markdown_report
 from cordis.memory import EpisodicMemoryLedger
 from cordis.mutator import MutantResult, generate_ast_mutants, run_in_memory_mutation_gate, run_repo_mutation_gate
-from examples.fixproof_killer_demo import (
+from examples.counterfeit_killer_demo import (
     BAD_AGENT_PATCH_SOURCE,
     GOOD_AGENT_TEST_SOURCE,
     REFERENCE_CORRECT_SOURCE,
