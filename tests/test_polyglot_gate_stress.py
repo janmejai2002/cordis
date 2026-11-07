@@ -466,7 +466,7 @@ class TestRustGateAdversarialStress(unittest.TestCase):
             )
             rep = pg.audit_rust_test_tampering(code_old, code_new, "calc_test.rs")
             self.assertFalse(rep.passed, f"Expected violation for {ign}")
-            self.assertTrue(any("#[ignore]" in v for v in rep.violations))
+            self.assertTrue(any("Line 1:" in v and "#[ignore]" in v for v in rep.violations))
 
     def test_audit_rust_test_tampering_weak_assertions(self):
         """Weak assertions assert!(x.is_ok()) or assert!(x.is_some()) without payload equality."""
@@ -872,6 +872,136 @@ class TestPolyglotGate1RoutingIntegration(unittest.TestCase):
 
                 rc_hook = handle_stop_hook(repo_dir=tmp_dir)
                 self.assertEqual(rc_hook, 0, "handle_stop_hook must pass with exit 0 for honest Go and Rust tests")
+
+    def test_rust_test_with_unwrap_passes_cleanly_without_false_positive(self):
+        """Rust unit tests legitimately use .unwrap() and .expect() to assert test outcomes.
+        run_verify_git() and handle_stop_hook() must not falsely flag test-file unwrap calls
+        as production panic injections.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            subprocess.run(["git", "init"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Tester"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_dir, check=True, capture_output=True)
+
+            p_rs = os.path.join(tmp_dir, "lib_test.rs")
+            with open(p_rs, "w", encoding="utf-8", newline="\n") as f:
+                f.write("#[test]\nfn test_base() {\n    assert_eq!(1, 1);\n}\n")
+
+            subprocess.run(["git", "add", "lib_test.rs"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_dir, check=True, capture_output=True)
+
+            # Legitimate unwrap inside test
+            with open(p_rs, "w", encoding="utf-8", newline="\n") as f:
+                f.write(
+                    "#[test]\n"
+                    "fn test_base() {\n"
+                    "    let val = Some(42).unwrap();\n"
+                    "    let text = Some(\"ok\").expect(\"expected text\");\n"
+                    "    assert_eq!(val, 42);\n"
+                    "    assert_eq!(text, \"ok\");\n"
+                    "}\n"
+                )
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc_git = run_verify_git(repo_dir=tmp_dir)
+            self.assertEqual(rc_git, 0, f"run_verify_git must pass for legitimate test-file unwrap: {buf.getvalue()}")
+
+            err_buf = io.StringIO()
+            with redirect_stderr(err_buf):
+                rc_hook = handle_stop_hook(repo_dir=tmp_dir)
+            self.assertEqual(rc_hook, 0, f"handle_stop_hook must pass for legitimate test-file unwrap: {err_buf.getvalue()}")
+
+    def test_cross_language_unwrap_does_not_falsely_block_rust_source(self):
+        """When diff contains a non-Rust file (or Python test) with .unwrap() and a clean Rust source file,
+        run_verify_git() must not attribute the Python unwrap to the Rust source file.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            subprocess.run(["git", "init"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Tester"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_dir, check=True, capture_output=True)
+
+            p_src = os.path.join(tmp_dir, "lib.rs")
+            with open(p_src, "w", encoding="utf-8", newline="\n") as f:
+                f.write("pub fn safe_calc() -> i32 {\n    42\n}\n")
+
+            p_py = os.path.join(tmp_dir, "test_demo.py")
+            with open(p_py, "w", encoding="utf-8", newline="\n") as f:
+                f.write("def test_demo():\n    assert 1 == 1\n")
+
+            subprocess.run(["git", "add", "."], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_dir, check=True, capture_output=True)
+
+            # Modify Rust cleanly, modify Python with unwrap method call
+            with open(p_src, "w", encoding="utf-8", newline="\n") as f:
+                f.write("pub fn safe_calc() -> i32 {\n    let msg = \"do not .unwrap()\";\n    100\n}\n")
+            with open(p_py, "w", encoding="utf-8", newline="\n") as f:
+                f.write("def test_demo():\n    res = model.unwrap()\n    assert res == 100\n")
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc_git = run_verify_git(repo_dir=tmp_dir)
+            self.assertEqual(rc_git, 0, f"run_verify_git must not cross-contaminate Python unwrap to Rust: {buf.getvalue()}")
+            self.assertNotIn("Discovered existing test files", buf.getvalue(), "Must not auto-discover tests when test files are modified in git diff")
+
+    def test_production_rust_unwrap_is_caught_even_with_test_file_modified(self):
+        """When both a Rust test file and a Rust production source file are modified,
+        production .unwrap() injection in the source file must still be blocked.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            subprocess.run(["git", "init"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Tester"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_dir, check=True, capture_output=True)
+
+            p_src = os.path.join(tmp_dir, "lib.rs")
+            p_test = os.path.join(tmp_dir, "lib_test.rs")
+            with open(p_src, "w", encoding="utf-8", newline="\n") as f:
+                f.write("pub fn calc(x: Option<i32>) -> i32 {\n    x.unwrap_or(0)\n}\n")
+            with open(p_test, "w", encoding="utf-8", newline="\n") as f:
+                f.write("#[test]\nfn test_calc() {\n    assert_eq!(calc(Some(1)), 1);\n}\n")
+
+            subprocess.run(["git", "add", "."], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_dir, check=True, capture_output=True)
+
+            # Modify both: test is honest, src injects unwrap
+            with open(p_src, "w", encoding="utf-8", newline="\n") as f:
+                f.write("pub fn calc(x: Option<i32>) -> i32 {\n    x.unwrap()\n}\n")
+            with open(p_test, "w", encoding="utf-8", newline="\n") as f:
+                f.write("#[test]\nfn test_calc() {\n    assert_eq!(calc(Some(2)), 2);\n}\n")
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc_git = run_verify_git(repo_dir=tmp_dir)
+            self.assertEqual(rc_git, 1, f"run_verify_git must block production unwrap when test file is also modified: {buf.getvalue()}")
+
+            err_buf = io.StringIO()
+            with redirect_stderr(err_buf):
+                rc_hook = handle_stop_hook(repo_dir=tmp_dir)
+            self.assertEqual(rc_hook, 2, "handle_stop_hook must return exit code 2")
+
+    def test_handle_stop_hook_clean_tree_fast_path(self):
+        """Clean working tree with zero diffs must exit 0 immediately."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            subprocess.run(["git", "init"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.name", "Tester"], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_dir, check=True, capture_output=True)
+            p = os.path.join(tmp_dir, "lib.rs")
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write("pub fn f() -> i32 { 1 }\n")
+            subprocess.run(["git", "add", "."], cwd=tmp_dir, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_dir, check=True, capture_output=True)
+
+            rc = handle_stop_hook(repo_dir=tmp_dir)
+            self.assertEqual(rc, 0, "Clean working tree must exit 0")
+
+        # Non-git directory or None diff_report must also return 0 without AttributeError
+        with patch("cordis.hooks.extract_git_diff", return_value=None):
+            rc_none = handle_stop_hook(repo_dir=tmp_dir)
+            self.assertEqual(rc_none, 0, "diff_report=None must exit 0")
+
+        with tempfile.TemporaryDirectory() as empty_dir:
+            rc_empty = handle_stop_hook(repo_dir=empty_dir)
+            self.assertEqual(rc_empty, 0, "Non-git directory must exit 0")
 
 
 if __name__ == "__main__":

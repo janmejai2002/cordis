@@ -518,13 +518,15 @@ def run_verify_git(
                 file_path=test_file,
                 prod_rs_diff=diff_report.raw_diff or "",
             )
-        else:
+        elif test_file.endswith(".py"):
             g1 = audit_test_tampering(
                 old_test_code,
                 new_test_code,
                 target_function_names=diff_report.target_function_names,
                 file_path=test_file,
             )
+        else:
+            continue
         g1_reports.append((test_file, g1))
         if not g1.passed:
             overall_passed = False
@@ -532,10 +534,10 @@ def run_verify_git(
     # Check if any modified .rs source file injected a production .unwrap() or .expect()
     # via diff_report.raw_diff even when only a .rs file was modified
     if any(s.endswith(".rs") for s in diff_report.source_files):
-        if not any(t.endswith(".rs") for t in diff_report.test_files):
-            from cordis.polyglot_gate import audit_rust_test_tampering
-            for src_file in diff_report.source_files:
-                if src_file.endswith(".rs"):
+        from cordis.polyglot_gate import audit_rust_test_tampering
+        for src_file in diff_report.source_files:
+            if src_file.endswith(".rs"):
+                if not any(r[0] == src_file for r in g1_reports):
                     g1_rs = audit_rust_test_tampering(
                         "",
                         "",
@@ -545,7 +547,6 @@ def run_verify_git(
                     g1_reports.append((src_file, g1_rs))
                     if not g1_rs.passed:
                         overall_passed = False
-                    break
 
     test_code_combined = ""
     discovered_test_files: list[str] = []

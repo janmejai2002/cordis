@@ -774,35 +774,35 @@ def run_stop_hook_prosecutor(repo_dir: str = ".", max_retries: int = 3) -> int:
                 file_path=test_file,
                 prod_rs_diff=diff_report.raw_diff or "",
             )
-        else:
+        elif test_file.endswith(".py"):
             report = audit_test_tampering(
                 old_test_code=old_test_code,
                 new_test_code=new_test_code,
                 target_function_names=target_fns,
                 file_path=test_file,
             )
+        else:
+            continue
         if not report.passed:
             gate1_failed = True
             gate1_violations.extend(report.violations)
 
     # Check if any modified .rs source file injected a production .unwrap() or .expect()
     if any(s.endswith(".rs") for s in diff_report.source_files):
-        if not any(t.endswith(".rs") for t in diff_report.test_files):
-            from cordis.polyglot_gate import audit_rust_test_tampering
-            for src_file in diff_report.source_files:
-                if src_file.endswith(".rs"):
-                    rs_rep = audit_rust_test_tampering(
-                        "",
-                        "",
-                        file_path=src_file,
-                        prod_rs_diff=diff_report.raw_diff or "",
-                    )
-                    if not rs_rep.passed:
-                        gate1_failed = True
-                        for v in rs_rep.violations:
-                            if v not in gate1_violations:
-                                gate1_violations.append(v)
-                    break
+        from cordis.polyglot_gate import audit_rust_test_tampering
+        for src_file in diff_report.source_files:
+            if src_file.endswith(".rs"):
+                rs_rep = audit_rust_test_tampering(
+                    "",
+                    "",
+                    file_path=src_file,
+                    prod_rs_diff=diff_report.raw_diff or "",
+                )
+                if not rs_rep.passed:
+                    gate1_failed = True
+                    for v in rs_rep.violations:
+                        if v not in gate1_violations:
+                            gate1_violations.append(v)
 
     # Gate 2: Mutation gate on modified source files
     gate2_failed = False
@@ -841,10 +841,12 @@ def run_stop_hook_prosecutor(repo_dir: str = ".", max_retries: int = 3) -> int:
         src_code = src_full.read_text(encoding="utf-8", errors="replace")
 
         if src_code and primary_test_code:
+            mod_name = Path(src_file).with_suffix("").as_posix().replace("/", ".")
             g2_rep = run_in_memory_mutation_gate(
                 source_code=src_code,
                 test_code=primary_test_code,
                 target_function=mod_fn.name,
+                module_name=mod_name,
             )
             if not g2_rep.passed:
                 gate2_failed = True

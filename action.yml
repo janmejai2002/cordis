@@ -64,6 +64,7 @@ runs:
         GITHUB_TRIGGERING_ACTOR: '${{ github.triggering_actor }}'
         GITHUB_EVENT_NAME: '${{ github.event_name }}'
       run: |
+        export PYTHONPATH="${{ github.action_path }}${PYTHONPATH:+:$PYTHONPATH}"
         CMD="python -m cordis.cli verify-git --base-ref \"$BASE_REF\""
         if [ -n "$TARGET_REF" ]; then
           CMD="$CMD --target-ref \"$TARGET_REF\""

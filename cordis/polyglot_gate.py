@@ -689,6 +689,20 @@ def index_rust_ast_anchors(source_code: str, file_path: str = "lib.rs") -> Dict[
     return anchors
 
 
+def _is_rust_test_path(path_str: str) -> bool:
+    name = re.split(r"[\\/]", path_str)[-1].lower()
+    if (
+        name.endswith("_test.rs")
+        or name in ("test.rs", "tests.rs")
+        or (name.startswith("test_") and name.endswith(".rs"))
+    ):
+        return True
+    parts = [part.lower() for part in re.split(r"[\\/]", path_str)]
+    if any(part in ("tests", "test", "__tests__") for part in parts):
+        return True
+    return False
+
+
 def audit_rust_test_tampering(
     old_rs: str,
     new_rs: str,
@@ -726,15 +740,46 @@ def audit_rust_test_tampering(
 
     # 3. Production code panic injection via .unwrap() / .expect() in prod_rs_diff
     if prod_rs_diff:
+        has_unified_headers = (
+            "diff --git " in prod_rs_diff
+            or "\n--- " in prod_rs_diff
+            or prod_rs_diff.startswith("--- ")
+            or "\n+++ " in prod_rs_diff
+            or prod_rs_diff.startswith("+++ ")
+        )
+        current_file: Optional[str] = None if has_unified_headers else file_path
+
         for line_idx, line in enumerate(prod_rs_diff.splitlines(), start=1):
+            if line.startswith("diff --git "):
+                m = re.match(r"^diff --git\s+(?:a/)?(.*?)\s+(?:b/)?(.*)$", line)
+                if m:
+                    current_file = m.group(2).strip()
+                continue
+            if line.startswith("+++ "):
+                target = line[4:].strip()
+                if target.startswith("b/"):
+                    target = target[2:].strip()
+                if target != "/dev/null":
+                    current_file = target
+                continue
+
             if line.startswith("+") and not line.startswith("+++"):
+                if current_file:
+                    if not current_file.endswith(".rs") or _is_rust_test_path(current_file):
+                        continue
+                elif has_unified_headers:
+                    continue
+                else:
+                    if file_path and _is_rust_test_path(file_path):
+                        continue
+
                 added_code = line[1:]
-                code_without_comments = re.sub(r"//.*$", "", added_code)
-                if re.search(r"(?<!\bunwrap_or)(?<!\bunwrap_or_else)(?<!\bunwrap_or_default)\.unwrap\s*\(", code_without_comments):
+                masked_added = mask_rust_code(added_code, mask_strings=True)
+                if re.search(r"(?<!\bunwrap_or)(?<!\bunwrap_or_else)(?<!\bunwrap_or_default)\.unwrap\s*\(", masked_added):
                     violations.append(
                         f"Line {line_idx}: Production code injects unsafe/panic-prone .unwrap() call (violates Prusti/Creusot panic-freedom invariant)."
                     )
-                elif re.search(r"\.expect\s*\(", code_without_comments):
+                elif re.search(r"\.expect\s*\(", masked_added):
                     violations.append(
                         f"Line {line_idx}: Production code injects unsafe/panic-prone .expect() call (violates Prusti/Creusot panic-freedom invariant)."
                     )
