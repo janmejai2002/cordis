@@ -1,4 +1,4 @@
-﻿"""Episodic Memory Ledger: SQLite FTS5 BM25 + Word-Stem + Tag Reciprocal Rank Fusion (RRF).
+"""Episodic Memory Ledger: SQLite FTS5 BM25 + Word-Stem + Tag Reciprocal Rank Fusion (RRF).
 Includes explicit `status='superseded'` invalidation and `flake_retry_count` tracking.
 """
 from __future__ import annotations
@@ -187,3 +187,72 @@ class EpisodicMemoryLedger:
 
     def close(self) -> None:
         self.conn.close()
+
+    def record_gate_failure(
+        self,
+        file_path: str,
+        function_name: str,
+        ast_anchor: str,
+        surviving_descriptions: List[str],
+        gate1_violations: List[str],
+    ) -> int:
+        """Records a gate failure episode into episodic memory, invalidating any prior
+        active entries for the given AST anchor.
+        Delegates directly to record_outcome(..., supersede_previous_for_anchor=True).
+        """
+        summary_parts: List[str] = []
+        if surviving_descriptions:
+            sample_mutants = "; ".join(surviving_descriptions[:2])
+            summary_parts.append(f"{len(surviving_descriptions)} surviving mutants: {sample_mutants}")
+        if gate1_violations:
+            sample_violations = "; ".join(gate1_violations[:2])
+            summary_parts.append(f"Gate 1: {sample_violations}")
+
+        summary = " | ".join(summary_parts) if summary_parts else "Gate failure recorded"
+        normalized_file = file_path.replace("\\", "/")
+        tags = f"gate_failure {normalized_file} {function_name} mutation test_tampering"
+
+        return self.record_outcome(
+            ast_anchor=ast_anchor,
+            function_name=function_name,
+            failure_mode="gate_failure",
+            summary=summary,
+            tags=tags,
+            supersede_previous_for_anchor=True,
+        )
+
+    def format_pre_edit_memory_warning(
+        self,
+        file_path: str,
+        function_name: str,
+        top_k: int = 3,
+    ) -> str:
+        """Queries episodic memory for historical gate failures matching file_path and function_name.
+        Returns a compact, high-signal warning string strictly under 15 lines.
+        Returns empty string if no active records exist.
+        """
+        normalized_file = file_path.replace("\\", "/")
+        query = f"{normalized_file} {function_name}"
+        hits = self.recall_rrf(query, top_k=top_k)
+        active_hits = [h for h in hits if getattr(h, "status", "active") == "active"]
+        if not active_hits:
+            return ""
+
+        # Clamp hits to max 3 items to mathematically guarantee <15 lines
+        display_hits = active_hits[:min(top_k, 3)]
+
+        lines = [
+            "[CORDIS EPISODIC MEMORY WARNING]",
+            f"Target: {normalized_file}::{function_name} ({len(active_hits)} active failure memories)",
+            "Historical failure modes & banned agent shortcuts on this function:",
+        ]
+        for hit in display_hits:
+            clean_summary = hit.summary.replace("\n", " ").strip()
+            if len(clean_summary) > 75:
+                clean_summary = clean_summary[:72] + "..."
+            lines.append(f"  • [{hit.failure_mode}] Anchor: {hit.ast_anchor} (flake_retries={hit.flake_retry_count})")
+            lines.append(f"    Summary: {clean_summary}")
+        lines.append("Advice: Ensure tests kill all mutants and do not weaken asserts or mock internal domain logic.")
+        lines.append("[/CORDIS EPISODIC MEMORY WARNING]")
+
+        return "\n".join(lines)

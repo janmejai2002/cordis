@@ -751,15 +751,58 @@ def run_stop_hook_prosecutor(repo_dir: str = ".", max_retries: int = 3) -> int:
         new_test_code = test_full.read_text(encoding="utf-8", errors="replace")
         old_test_code = get_git_file_content("HEAD", test_file, repo_dir=str(repo_path)) or ""
 
-        report = audit_test_tampering(
-            old_test_code=old_test_code,
-            new_test_code=new_test_code,
-            target_function_names=target_fns,
-            file_path=test_file,
-        )
+        if test_file.endswith((".ts", ".tsx", ".js", ".jsx")):
+            from cordis.ts_gate import audit_ts_test_tampering
+            report = audit_ts_test_tampering(
+                old_test_code=old_test_code,
+                new_test_code=new_test_code,
+                target_function_names=target_fns,
+                file_path=test_file,
+            )
+        elif test_file.endswith(".go"):
+            from cordis.polyglot_gate import audit_go_test_tampering
+            report = audit_go_test_tampering(
+                old_test_code,
+                new_test_code,
+                file_path=test_file,
+            )
+        elif test_file.endswith(".rs"):
+            from cordis.polyglot_gate import audit_rust_test_tampering
+            report = audit_rust_test_tampering(
+                old_test_code,
+                new_test_code,
+                file_path=test_file,
+                prod_rs_diff=diff_report.raw_diff or "",
+            )
+        else:
+            report = audit_test_tampering(
+                old_test_code=old_test_code,
+                new_test_code=new_test_code,
+                target_function_names=target_fns,
+                file_path=test_file,
+            )
         if not report.passed:
             gate1_failed = True
             gate1_violations.extend(report.violations)
+
+    # Check if any modified .rs source file injected a production .unwrap() or .expect()
+    if any(s.endswith(".rs") for s in diff_report.source_files):
+        if not any(t.endswith(".rs") for t in diff_report.test_files):
+            from cordis.polyglot_gate import audit_rust_test_tampering
+            for src_file in diff_report.source_files:
+                if src_file.endswith(".rs"):
+                    rs_rep = audit_rust_test_tampering(
+                        "",
+                        "",
+                        file_path=src_file,
+                        prod_rs_diff=diff_report.raw_diff or "",
+                    )
+                    if not rs_rep.passed:
+                        gate1_failed = True
+                        for v in rs_rep.violations:
+                            if v not in gate1_violations:
+                                gate1_violations.append(v)
+                    break
 
     # Gate 2: Mutation gate on modified source files
     gate2_failed = False
@@ -771,6 +814,8 @@ def run_stop_hook_prosecutor(repo_dir: str = ".", max_retries: int = 3) -> int:
     # Test code candidates for in-memory mutation
     test_code_candidates: list[str] = []
     for tf in diff_report.test_files:
+        if not tf.endswith(".py"):
+            continue
         tf_full = repo_path / tf
         if tf_full.is_file():
             test_code_candidates.append(tf_full.read_text(encoding="utf-8", errors="replace"))
@@ -787,7 +832,7 @@ def run_stop_hook_prosecutor(repo_dir: str = ".", max_retries: int = 3) -> int:
     primary_test_code = "\n".join(test_code_candidates[:2])
 
     for mod_fn in diff_report.modified_functions:
-        if mod_fn.is_test:
+        if mod_fn.is_test or not mod_fn.file_path.endswith(".py"):
             continue
         src_file = mod_fn.file_path
         src_full = repo_path / src_file
@@ -972,3 +1017,8 @@ def install_harness_hooks(
         installed.append(str(settings_file))
 
     return installed
+
+
+# Backward-compatible and procedural alias
+handle_stop_hook = run_stop_hook_prosecutor
+

@@ -10,7 +10,7 @@
 
 Cordis is an independent, zero-token adversarial verification engine designed to prevent AI coding agents from cheating test suites. In this release (v0.3.0):
 - **100% Mutant Kill Rate**: Across all 8 core modules (`ast_gate.py`, `mutator.py`, `fuzzer.py`, `repair.py`, `hooks.py`, `ts_gate.py`, `forge_guard.py`, `policy_guard.py`), 0 surviving non-arid mutants exist across 71 core functions.
-- **171/171 Unit & Stress Tests Passing**: Full suite runs deterministically in ~32s via `python -m unittest discover -s tests -v`.
+- **324+ Unit & Stress Tests Passing**: Full suite runs deterministically in ~42s via `python -m unittest discover -s tests -v`.
 - **TypeScript / JavaScript Mutation & Tampering Gate** (`cordis/ts_gate.py`): Full lexical masking, function anchor indexing (BLAKE2b 16-hex), and relational mutant synthesis.
 - **Autonomous Hook Firewall** (`cordis/hooks.py`): Real-time pre-tool interception and pre-commit verification for Claude Code and git.
 - **Automated Test Synthesis Engine** (`cordis/repair.py`): Generates targeted invariant assertions for surviving mutants.
@@ -93,7 +93,7 @@ source .venv/bin/activate       # On macOS/Linux
 # 3. Install in editable mode with development dependencies
 uv pip install -e ".[dev]"
 
-# 4. Verify test suite (171 tests)
+# 4. Verify test suite (324+ tests)
 python -m unittest discover -s tests -v
 
 # 5. Install git pre-commit hook and agent firewall

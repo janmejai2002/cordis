@@ -34,9 +34,9 @@ Cordis is transforming from a Python-focused AST invariant prosecutor into the *
 
 ## ⚡ Wave 2: Frontier AST Operators & Deep Protocols (Q3 2026) — *Completed & Verified*
 
-### 1. Transport Stream Lifecycle & Async Resource Auditing
-- **Context**: In HTTP client and streaming libraries (`httpx`, `aiohttp`, `urllib3`), agents frequently mock response bodies without verifying connection release (`stream.close()` / `stream.aclose()`).
-- **Milestone**: Completed in `cordis/stream_gate.py` (`StreamLifecycleSpy`, `EphemeralSQLiteSandbox`) and `cordis/mutator.py` (`resource_close_elision`), enforcing context manager and teardown assertion verification.
+### 1. Milestone 2.1: Transport Stream Lifecycle & Ephemeral SQLite Sandboxing
+- **Context**: In HTTP client and streaming libraries (`httpx`, `aiohttp`, `urllib3`) and stateful relational databases (`sqlite3`, SQLModel), agents frequently mock response bodies without verifying connection release (`stream.close()` / `stream.aclose()`) or leak mutations across probes.
+- **Milestone**: Completed in `cordis/stream_gate.py` (`StreamLifecycleSpy`, `EphemeralSQLiteSandbox`) and `cordis/mutator.py` (`resource_close_elision`), enforcing context manager and teardown assertion verification with transactional savepoint isolation (`SAVEPOINT cordis_probe;`).
 - **Status**: [x] *Completed & Verified*
 
 ### 2. Multi-Hop Buffer Boundary Probing (`CHUNK_SIZE`)
@@ -51,18 +51,24 @@ Cordis is transforming from a Python-focused AST invariant prosecutor into the *
 
 ---
 
-## 🌐 Wave 3: Polyglot Multi-Language Prosecution (Q4 2026) — *Wave 3.1 Completed & Verified*
+## 🌐 Wave 3: Polyglot Multi-Language Prosecution (Q4 2026) — *Completed & Verified*
 
-- [x] **TypeScript / JavaScript AST Gate (Node & Bun) — *Completed & Verified (Q4 2026)***:
+- [x] **Wave 3.1: TypeScript / JavaScript AST Gate (`cordis/ts_gate.py`) — *Completed & Verified (Q4 2026)***:
   - 100% Python Standard Library zero-dependency lexical scanner and comment/string masker in `cordis/ts_gate.py`.
   - 64-bit cryptographic BLAKE2b function anchors (`¶file.ts#16hex`) for top-level, arrow, and class methods.
   - Jest/Vitest test-tampering detection: catches weakened assertions (`.toBeDefined()`, `.not.toBeNull()`, `.toBeTruthy()`), tautologies (`expect(true).toBe(true)`), mock abuse (`vi.mock`, `jest.spyOn`), and skip annotations (`it.skip`, `xit`).
-  - In-place diff-scoped TypeScript mutant synthesis (`===` $\leftrightarrow$ `!==`, `<=` $\leftrightarrow$ `<`, `&&` $\leftrightarrow$ `||`, `return null;`).
+  - In-place diff-scoped TypeScript mutant synthesis (`===` $\leftrightarrow$ `!==`, `<=` $\leftrightarrow$ `<`, `&&` $\leftrightarrow$ `||`, `return null;`), dual parameter signature (`source_code` / `ts_code`).
   - Integrated into `cordis verify-git` and `cordis probe`.
-- [ ] **Rust Invariant Engine (`cargo-cordis`)**:
-  - Trait boundary mutation and property fuzzing integration via `cargo-fuzz`.
-- [ ] **Go AST Prosecutor (`go/ast`)**:
-  - In-place mutant injection for table-driven tests and goroutine concurrency leak detection.
+- [x] **Wave 3.2: Go Table-Driven Test Gate & AST Prosecutor (`cordis/polyglot_gate.py`) — *Completed & Verified (Q4 2026)***:
+  - 100% Python Standard Library zero-dependency lexical scanner for Go 1.18+ (`cordis/polyglot_gate.py`).
+  - 64-bit cryptographic BLAKE2b function and receiver method anchors (`¶file.go#16hex`, `func (r *Receiver) Method`).
+  - Go test tampering detection: catches `t.Skip` / `t.Skipf` / `t.SkipNow`, hollow assertions (`assert.NotNil` replacing `assert.Equal`), blank identifier discards (`_ = got`), and table-driven slice shrinking.
+  - In-place diff-scoped Go mutant synthesis (`==`, `<=`, `&&`, `+`, `return nil`).
+- [x] **Wave 3.3: Rust Invariant Engine (`cordis/polyglot_gate.py`, Prusti/Creusot verification) — *Completed & Verified (Q4 2026)***:
+  - 100% Python Standard Library zero-dependency lexical scanner supporting nested block comments (`/* /* */ */`), raw strings (`r#"..."#`), and lifetime handling.
+  - 64-bit cryptographic BLAKE2b function and `impl` method anchors (`¶file.rs#16hex`, `Type.method`).
+  - Rust test tampering detection: catches `#[ignore]` attributes, weak status checks (`assert!(x.is_ok())`, `assert!(x.is_some())` without value assertions), and production `.unwrap()` / `.expect()` panic-prone injections grounded in Prusti (Astrauskas et al. 2019) and Creusot (Denis et al. 2022) formal verification invariants.
+  - In-place diff-scoped Rust mutant synthesis (`==`, `<=`, `&&`, `+`, `return Default::default();`).
 
 ---
 

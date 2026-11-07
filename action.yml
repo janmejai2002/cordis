@@ -1,5 +1,5 @@
 name: 'Cordis Adversarial AI-PR Prosecutor'
-description: 'Independent adversarial verifier that blocks counterfeit AI PRs and surviving AST mutants in CI/CD'
+description: 'Zero-token, deterministic AST mutation engine, test tampering firewall, and polyglot invariant prosecutor for AI-generated code'
 author: 'Janmejai'
 branding:
   icon: 'shield'
@@ -10,6 +10,18 @@ inputs:
     description: 'Base Git reference to diff against (e.g. HEAD~1, origin/main, or PR base commit)'
     required: false
     default: 'HEAD~1'
+  target-ref:
+    description: 'Target Git ref to inspect (leave empty for working tree or HEAD)'
+    required: false
+    default: ''
+  github-comment:
+    description: 'Whether to emit GitHub PR comment markdown output'
+    required: false
+    default: 'true'
+  suggest-test:
+    description: 'Whether to synthesize mutant-killing unit test assertions for surviving mutants'
+    required: false
+    default: 'true'
   output-html:
     description: 'Path where the visual HTML scorecard should be written'
     required: false
@@ -18,10 +30,6 @@ inputs:
     description: 'Path where the forensic markdown scorecard should be written'
     required: false
     default: 'cordis_report.md'
-  python-version:
-    description: 'Python version to use'
-    required: false
-    default: '3.11'
   fail-on-blocked:
     description: 'Whether to exit with error code when Cordis blocks a counterfeit or mutated PR'
     required: false
@@ -41,39 +49,52 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python-version }}
-
-    - name: Install Cordis
-      shell: bash
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install cordis-verify
-
     - name: Run Cordis Invariant Prosecutor
       id: prosecute
       shell: bash
+      env:
+        PYTHONPATH: '${{ github.action_path }}'
+        BASE_REF: '${{ inputs.base-ref }}'
+        TARGET_REF: '${{ inputs.target-ref }}'
+        GITHUB_COMMENT: '${{ inputs.github-comment }}'
+        SUGGEST_TEST: '${{ inputs.suggest-test }}'
+        OUTPUT_HTML: '${{ inputs.output-html }}'
+        OUTPUT_MD: '${{ inputs.output-md }}'
+        GITHUB_ACTOR: '${{ github.actor }}'
+        GITHUB_TRIGGERING_ACTOR: '${{ github.triggering_actor }}'
+        GITHUB_EVENT_NAME: '${{ github.event_name }}'
       run: |
+        CMD="python -m cordis.cli verify-git --base-ref \"$BASE_REF\""
+        if [ -n "$TARGET_REF" ]; then
+          CMD="$CMD --target-ref \"$TARGET_REF\""
+        fi
+        if [ "$GITHUB_COMMENT" = "true" ]; then
+          CMD="$CMD --github-comment"
+        fi
+        if [ "$SUGGEST_TEST" = "true" ]; then
+          CMD="$CMD --suggest-test"
+        fi
+        if [ -n "$OUTPUT_HTML" ]; then
+          CMD="$CMD --output-html \"$OUTPUT_HTML\""
+        fi
+        if [ -n "$OUTPUT_MD" ]; then
+          CMD="$CMD --output-md \"$OUTPUT_MD\""
+        fi
+
         set +e
-        python -m cordis.cli verify-git \
-          --base-ref "${{ inputs.base-ref }}" \
-          --output-html "${{ inputs.output-html }}" \
-          --output-md "${{ inputs.output-md }}" \
-          --github-comment
+        eval "$CMD"
         EXIT_CODE=$?
-        
+
         if [ $EXIT_CODE -eq 0 ]; then
           echo "verdict=APPROVED" >> $GITHUB_OUTPUT
         else
           echo "verdict=BLOCKED" >> $GITHUB_OUTPUT
         fi
-        
-        if [ -f "${{ inputs.output-md }}" ]; then
-          cat "${{ inputs.output-md }}" >> $GITHUB_STEP_SUMMARY
+
+        if [ -f "$OUTPUT_MD" ]; then
+          cat "$OUTPUT_MD" >> $GITHUB_STEP_SUMMARY
         fi
-        
+
         if [ "${{ inputs.fail-on-blocked }}" = "true" ] && [ $EXIT_CODE -ne 0 ]; then
           echo "::error::Cordis Prosecutor BLOCKED this pull request due to invariant violations or surviving AST mutants."
           exit $EXIT_CODE

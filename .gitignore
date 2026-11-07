@@ -29,6 +29,8 @@ videos/**/renders/
 assets/voice/
 .agent/
 .agents/
+.cursor/
+.gemini/
 *LAUNCH*
 *PLAYBOOK*
 *launch*

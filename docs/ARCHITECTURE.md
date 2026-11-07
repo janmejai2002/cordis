@@ -58,6 +58,22 @@ The pipeline executes across **four deterministic gates**:
                        Verdict: Approved to Land OR Blocked
 ```
 
+### Module Architecture Table
+
+| Module | Gate / Subsystem | Architectural Responsibility |
+| :--- | :--- | :--- |
+| `cordis/ast_gate.py` | Gate 1 (Python) | Traverses Python ASTs to detect assertion tampering, tautological tests (`assert True`, `assert x == x`), hollow checks (`is not None`), and compute Weighted MAR. |
+| `cordis/ts_gate.py` | Gate 1 & 2 (TS/JS) | Lexical AST masking, function anchor indexing (BLAKE2b 16-hex), and relational/boolean mutant synthesis for TypeScript & JavaScript codebases. |
+| `cordis/polyglot_gate.py` | Gate 1 & 2 (Go & Rust) | Zero-dependency lexical AST scanner, BLAKE2b function anchors, Go tampering (`t.Skip`, table shrinking), Rust panic audits (`.unwrap()`, `.expect()`, `#[ignore]`), and diff-scoped mutant synthesis. |
+| `cordis/stream_gate.py` | Wave 2 Transport & Data | Transport stream lifecycle spy (`StreamLifecycleSpy`) enforcing `.close()`/`.aclose()` assertions, and ephemeral transactional SQLite savepoint sandboxing (`EphemeralSQLiteSandbox`). |
+| `cordis/mutator.py` | Gate 2 | In-memory and disk-based AST mutation engine with `.cordis.bak` crash recovery, IEEE-754 NaN canary poisoning, and Google-style arid-node pruning. |
+| `cordis/repair.py` | Gate 2 Auto-Repair | Evaluates boundary inputs against surviving mutants and synthesizes copy-pasteable, mutant-killing unit test assertions. |
+| `cordis/fuzzer.py` | Gate 3 | Constant-harvesting differential property fuzzer (200-vector matrix) and 30-round Mann-Whitney U non-parametric latency regression gate. |
+| `cordis/hooks.py` | Firewall & LifeCycle | Autonomous agent firewall providing `pre-tool` anti-bypass interception and `stop-gate` working tree invariant verification for Claude Code and git. |
+| `cordis/forge_guard.py` | Gate 0 | Analyzes commit trailers, PR actor provenance, and dual-custody verification to prevent bot collusion. |
+| `cordis/policy_guard.py` | Gate 0 Pre-Flight | Scans repository governance files (`CONTRIBUTING.md`, `README.md`) for anti-AI contributor bans and mandatory issue prerequisites. |
+| `cordis/cli.py` | Unified CLI | Unified CLI entrypoint (`cordis`, `cordis-verify`) orchestrating all verification gates, probes, and reports. |
+
 ---
 
 ## 🛡️ Gate 0: ForgeGuard & PolicyGuard (`cordis/forge_guard.py` & `cordis/policy_guard.py`)
@@ -174,6 +190,31 @@ Cordis provides zero-dependency TypeScript/JavaScript verification using standar
 - **Lexical Masking Scanner**: Handles single/multi-line comments, template literals with nested `${...}` expressions, and regex literals without external node binaries.
 - **Function Anchor Indexing**: Extracts arrow functions, function declarations, class methods, and computed symbols with deterministic 16-hex BLAKE2b digests.
 - **Diff-Scoped Mutation Synthesis**: Synthesizes relational operator mutations (`===` $\leftrightarrow$ `!==`, `<` $\leftrightarrow$ `>=`) and detects hollow assertions (`toBeDefined()`, `not.toBeNull()`).
+
+---
+
+## 🌊 Transport Stream Lifecycle & Ephemeral Sandbox (`cordis/stream_gate.py`)
+
+Cordis verifies streaming protocol lifecycles and provides stateful database isolation:
+- **Transport Stream Lifecycle Spy (`StreamLifecycleSpy`)**: Tracks connection release and stream termination (`stream.close()`, `stream.aclose()`, `resp.release()`) across async and sync HTTP clients (`httpx`, `aiohttp`, `urllib3`). Proves that tests assert proper resource cleanup rather than leaking connections behind mocks.
+- **Ephemeral SQLite Sandboxing (`EphemeralSQLiteSandbox`)**: Provides transactional savepoint isolation (`SAVEPOINT cordis_probe;` ... `ROLLBACK TO SAVEPOINT cordis_probe;`) for in-memory and disk SQLite databases, preventing probe state corruption and schema pollution across test runs.
+
+---
+
+## 🦀 Polyglot Multi-Language AST Gate — Go & Rust (`cordis/polyglot_gate.py`)
+
+Cordis extends AST invariant prosecution to compiled languages using 100% Python standard library:
+- **Go Table-Driven Test & Receiver Gate**:
+  - Zero-dependency lexical scanner for Go 1.18+ source and test code.
+  - 64-bit cryptographic BLAKE2b function and receiver method anchors (`¶file.go#16hex`, `Receiver.Method`).
+  - Catches test tampering: `t.Skip` / `t.Skipf` / `t.SkipNow`, hollow assertions (`assert.NotNil` replacing value equality), blank identifier discards (`_ = got`), and table-driven slice shrinking.
+  - Diff-scoped mutant synthesis (`==`, `<=`, `&&`, `+`, `return nil`).
+- **Rust Invariant Engine & Panic Auditor**:
+  - Zero-dependency scanner handling nested block comments (`/* /* */ */`), raw string delimiters (`r#"..."#`), and lifetime syntax.
+  - 64-bit cryptographic BLAKE2b function and `impl` method anchors (`¶file.rs#16hex`, `Type.method`).
+  - Rust test tampering detection: catches `#[ignore]` attributes, weak status checks (`assert!(x.is_ok())` without payload equality), and tautological assertions.
+  - Formal Verification Panic-Freedom: Prosecutes newly injected `.unwrap()` and `.expect()` calls in production diffs grounded in Prusti and Creusot verification invariants, enforcing safe alternatives (`.unwrap_or_default()`, `?`, pattern matching).
+  - Diff-scoped mutant synthesis (`==`, `<=`, `&&`, `+`, `return Default::default();`).
 
 ---
 

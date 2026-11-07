@@ -503,7 +503,17 @@ def audit_test_tampering(
             if func_str in {"pytest.skip", "pytest.xfail", "unittest.skip"}:
                 if func_str not in old_skip_calls:
                     violations.append(f"Line {node.lineno}: Explicit `{func_str}()` call inside test body.")
-            if any(m in func_str for m in ("patch", "MagicMock", "monkeypatch.setattr")):
+            is_mock_call = (
+                func_str.startswith("unittest.mock.")
+                or func_str.startswith("mock.")
+                or func_str.startswith("mocker.")
+                or func_str.startswith("monkeypatch.")
+                or func_str == "patch"
+                or func_str.startswith("patch.")
+                or func_str in ("MagicMock", "Mock")
+                or func_str.endswith((".MagicMock", ".Mock"))
+            )
+            if is_mock_call:
                 call_dump = ast.unparse(node)
                 for target_fn in target_set:
                     if target_fn in call_dump and (target_fn, func_str) not in old_target_mocks:

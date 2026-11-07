@@ -47,8 +47,14 @@ class GitDiffReport:
         return self.source_files + self.test_files
 
 
-def is_test_file(path_str: str) -> bool:
-    """Identifies if a file is a test file based on standard Python and TypeScript/JS conventions."""
+TS_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx")
+GO_EXTENSIONS = (".go",)
+RUST_EXTENSIONS = (".rs",)
+SUPPORTED_EXTENSIONS = (".py",) + TS_EXTENSIONS + GO_EXTENSIONS + RUST_EXTENSIONS
+
+
+def is_test_file(path_str: str, content: Optional[str] = None) -> bool:
+    """Identifies if a file is a test file for Python, TypeScript/JS, Go, and Rust."""
     p = Path(path_str)
     name = p.name.lower()
     if (
@@ -64,10 +70,38 @@ def is_test_file(path_str: str) -> bool:
         or name.endswith(".spec.jsx")
     ):
         return True
+
+    # Go conventions
+    if name.endswith("_test.go"):
+        return True
+
+    # Rust conventions
+    if (
+        name.endswith("_test.rs")
+        or name == "test.rs"
+        or name == "tests.rs"
+        or (name.startswith("test_") and name.endswith(".rs"))
+    ):
+        return True
+
     parts = [part.lower() for part in p.parts]
     if any(part in ("tests", "test", "__tests__") for part in parts):
         return True
+
+    # Rust inline #[cfg(test)] check
+    if path_str.endswith(".rs"):
+        if content is not None:
+            if "#[cfg(test)]" in content:
+                return True
+        else:
+            try:
+                if p.is_file() and "#[cfg(test)]" in p.read_text(encoding="utf-8", errors="replace"):
+                    return True
+            except OSError:
+                pass
+
     return False
+
 
 
 class _FunctionVisitor(ast.NodeVisitor):
@@ -185,19 +219,9 @@ def parse_git_diff_text(
     report = GitDiffReport(base_ref=base_ref, target_ref=target_ref, raw_diff=diff_text)
     file_lines = parse_unified_diff_hunks(diff_text)
 
-    TS_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx")
-    SUPPORTED_EXTENSIONS = (".py",) + TS_EXTENSIONS
-
     for file_path, lines in file_lines.items():
         if not any(file_path.endswith(ext) for ext in SUPPORTED_EXTENSIONS):
             continue
-
-        if is_test_file(file_path):
-            if file_path not in report.test_files:
-                report.test_files.append(file_path)
-        else:
-            if file_path not in report.source_files:
-                report.source_files.append(file_path)
 
         content: Optional[str] = None
         if file_reader:
@@ -210,20 +234,53 @@ def parse_git_diff_text(
                 except OSError:
                     content = None
 
+        if is_test_file(file_path, content=content):
+            if file_path not in report.test_files:
+                report.test_files.append(file_path)
+        else:
+            if file_path not in report.source_files:
+                report.source_files.append(file_path)
+
         if not content:
             continue
 
         if file_path.endswith(".py"):
             funcs = find_functions_in_source(content)
-        else:
+        elif any(file_path.endswith(ext) for ext in TS_EXTENSIONS):
             from cordis.ts_gate import index_ts_ast_anchors
             ts_anchors = index_ts_ast_anchors(content, file_path=file_path)
             funcs = [
                 (a.identifier, a.scope_path, a.lineno, a.end_lineno)
                 for a in ts_anchors.values()
             ]
+        elif any(file_path.endswith(ext) for ext in GO_EXTENSIONS):
+            from cordis.polyglot_gate import index_go_ast_anchors
+            go_anchors = index_go_ast_anchors(content, file_path=file_path)
+            funcs = [
+                (a.identifier, a.scope_path, a.lineno, a.end_lineno)
+                for a in go_anchors.values()
+            ]
+        elif any(file_path.endswith(ext) for ext in RUST_EXTENSIONS):
+            from cordis.polyglot_gate import index_rust_ast_anchors
+            rust_anchors = index_rust_ast_anchors(content, file_path=file_path)
+            funcs = [
+                (a.identifier, a.scope_path, a.lineno, a.end_lineno)
+                for a in rust_anchors.values()
+            ]
+        else:
+            funcs = []
 
-        file_is_test = is_test_file(file_path)
+        if funcs:
+            seen_funcs = set()
+            unique_funcs = []
+            for f in funcs:
+                f_key = (f[0], f[1], f[2], f[3])
+                if f_key not in seen_funcs:
+                    seen_funcs.add(f_key)
+                    unique_funcs.append(f)
+            funcs = unique_funcs
+
+        file_is_test = is_test_file(file_path, content=content)
         for name, scope, start_line, end_line in funcs:
             func_line_range = set(range(start_line, end_line + 1))
             if func_line_range.intersection(lines):
@@ -233,7 +290,14 @@ def parse_git_diff_text(
                         file_path=file_path,
                         lineno=start_line,
                         end_lineno=end_line,
-                        is_test=file_is_test or name.startswith("test_") or name.startswith("it_") or name.startswith("test"),
+                        is_test=(
+                            file_is_test
+                            or name.startswith("test_")
+                            or name.startswith("it_")
+                            or name.startswith("test")
+                            or name.startswith("Test")
+                            or name.startswith("Benchmark")
+                        ),
                         scope=scope,
                     )
                 )

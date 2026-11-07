@@ -467,7 +467,7 @@ def run_verify_git(
     print(f"  • Target functions      ({len(diff_report.target_function_names)}): {diff_report.target_function_names}")
 
     if not diff_report.source_files and not diff_report.test_files:
-        print("✅ No Python or TypeScript/JavaScript source or test files modified in this git diff. Verdict: PASS")
+        print("✅ No Python, TypeScript/JavaScript, Go, or Rust source or test files modified in this git diff. Verdict: PASS")
         return 0
 
     overall_passed = True
@@ -495,13 +495,28 @@ def run_verify_git(
             p = Path(repo_dir) / test_file
             new_test_code = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
 
-        if any(test_file.endswith(ext) for ext in (".ts", ".tsx", ".js", ".jsx")):
+        if test_file.endswith((".ts", ".tsx", ".js", ".jsx")):
             from cordis.ts_gate import audit_ts_test_tampering
             g1 = audit_ts_test_tampering(
                 old_test_code,
                 new_test_code,
                 target_function_names=diff_report.target_function_names,
                 file_path=test_file,
+            )
+        elif test_file.endswith(".go"):
+            from cordis.polyglot_gate import audit_go_test_tampering
+            g1 = audit_go_test_tampering(
+                old_test_code,
+                new_test_code,
+                file_path=test_file,
+            )
+        elif test_file.endswith(".rs"):
+            from cordis.polyglot_gate import audit_rust_test_tampering
+            g1 = audit_rust_test_tampering(
+                old_test_code,
+                new_test_code,
+                file_path=test_file,
+                prod_rs_diff=diff_report.raw_diff or "",
             )
         else:
             g1 = audit_test_tampering(
@@ -513,6 +528,24 @@ def run_verify_git(
         g1_reports.append((test_file, g1))
         if not g1.passed:
             overall_passed = False
+
+    # Check if any modified .rs source file injected a production .unwrap() or .expect()
+    # via diff_report.raw_diff even when only a .rs file was modified
+    if any(s.endswith(".rs") for s in diff_report.source_files):
+        if not any(t.endswith(".rs") for t in diff_report.test_files):
+            from cordis.polyglot_gate import audit_rust_test_tampering
+            for src_file in diff_report.source_files:
+                if src_file.endswith(".rs"):
+                    g1_rs = audit_rust_test_tampering(
+                        "",
+                        "",
+                        file_path=src_file,
+                        prod_rs_diff=diff_report.raw_diff or "",
+                    )
+                    g1_reports.append((src_file, g1_rs))
+                    if not g1_rs.passed:
+                        overall_passed = False
+                    break
 
     test_code_combined = ""
     discovered_test_files: list[str] = []
@@ -904,6 +937,157 @@ def run_hooks_cli(args: argparse.Namespace, hooks_parser: Optional[argparse.Argu
     return 1
 
 
+def run_init_skill_cli(repo_dir: str = ".", audit: bool = False) -> int:
+    """Dispatches `cordis init-skill`: compiles agent manifests and optionally audits security."""
+    from cordis.skill_compiler import audit_skill_manifests, compile_agent_skill_manifests
+
+    manifests = compile_agent_skill_manifests(repo_dir=repo_dir)
+    print(f"✅ [Cordis Skill Compiler]: Synchronized {len(manifests)} manifest(s) across agent harnesses.")
+    for m in manifests:
+        print(f"  • {m}")
+
+    if audit:
+        report = audit_skill_manifests(repo_dir=repo_dir)
+        if not report.clean:
+            print(f"\n🛑 [Cordis Skill Audit]: FAILED — {len(report.violations)} security violation(s) detected across {len(report.scanned_files)} scanned file(s):")
+            for v in report.violations:
+                print(f"  - {v}")
+            return 1
+        else:
+            print(f"\n✅ [Cordis Skill Audit]: Clean. 0 security violations detected across {len(report.scanned_files)} scanned file(s).")
+
+    return 0
+
+
+def run_memory_inject_cli(
+    file_path: str,
+    function_name: str,
+    db_path: str = ".cordis_memory.db",
+    top_k: int = 3,
+) -> int:
+    """Dispatches `cordis memory-inject`: formats pre-edit episodic memory warning."""
+    from cordis.memory import EpisodicMemoryLedger
+    ledger = EpisodicMemoryLedger(db_path=db_path)
+    try:
+        warning = ledger.format_pre_edit_memory_warning(
+            file_path=file_path,
+            function_name=function_name,
+            top_k=top_k,
+        )
+    finally:
+        ledger.close()
+
+    if warning:
+        print(warning)
+    else:
+        print(f"No active failure memories found for {file_path}::{function_name}.")
+    return 0
+
+
+def run_verify_patch_cli(
+    old_path: str,
+    new_path: str,
+    intended_functions: list[str] | None = None,
+    file_path: str = "module.py",
+    output_json: str | None = None,
+) -> int:
+    """Dispatches `cordis verify-patch`: checks collateral AST damage and syntax errors."""
+    from cordis.hashline_guard import verify_collateral_ast_integrity
+
+    old_p = Path(old_path)
+    new_p = Path(new_path)
+    if not old_p.is_file() and not new_p.is_file():
+        print(f"🛑 [Collateral AST Guard]: Neither old file '{old_path}' nor new file '{new_path}' exists.")
+        return 1
+
+    old_code = old_p.read_text(encoding="utf-8", errors="replace") if old_p.is_file() else ""
+    new_code = new_p.read_text(encoding="utf-8", errors="replace") if new_p.is_file() else ""
+    intended = intended_functions or []
+
+    report = verify_collateral_ast_integrity(
+        old_code=old_code,
+        new_code=new_code,
+        intended_functions=intended,
+        file_path=file_path,
+    )
+
+    if output_json:
+        out_file = Path(output_json)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8", newline="\n")
+        print(f"Saved collateral report JSON: {out_file.resolve()}")
+
+    if report.passed:
+        print(f"✅ [Collateral AST Guard]: PASSED for {file_path} (0 collateral modifications or syntax errors).")
+        return 0
+    else:
+        print(f"🛑 [Collateral AST Guard]: FAILED for {file_path} ({len(report.violations)} violation(s)):")
+        for v in report.violations:
+            print(f"  - {v}")
+        return 1
+
+
+def run_verify_outbox_cli(
+    repo_dir: str = ".",
+    base_ref: str = "HEAD~1",
+    intended_functions: list[str] | None = None,
+    output_receipt: str | None = None,
+    output_json: str | None = None,
+) -> int:
+    """Dispatches `cordis verify-outbox`: verifies worker outbox and outputs signed merge receipt."""
+    from cordis.hashline_guard import verify_worker_outbox
+
+    receipt = verify_worker_outbox(
+        repo_dir=repo_dir,
+        base_ref=base_ref,
+        intended_functions=intended_functions,
+    )
+    formatted = receipt.format_receipt()
+    print(formatted)
+
+    if output_receipt:
+        r_path = Path(output_receipt)
+        r_path.parent.mkdir(parents=True, exist_ok=True)
+        r_path.write_text(receipt.receipt_text or formatted, encoding="utf-8", newline="\n")
+        print(f"\nWritten merge receipt to {r_path.resolve()}")
+
+    if output_json:
+        j_path = Path(output_json)
+        j_path.parent.mkdir(parents=True, exist_ok=True)
+        j_path.write_text(json.dumps(receipt.to_dict(), indent=2) + "\n", encoding="utf-8", newline="\n")
+        print(f"\nWritten merge receipt JSON to {j_path.resolve()}")
+
+    return 0 if receipt.passed else 1
+
+
+def run_benchmark_models_cli(
+    repo_dir: str = ".",
+    max_commits: int = 50,
+    output_md: str | None = None,
+    output_json: str | None = None,
+) -> int:
+    """Dispatches `cordis benchmark-models`: audits model commit history and generates leaderboard."""
+    from cordis.model_eval import evaluate_model_history
+
+    report = evaluate_model_history(repo_dir=repo_dir, max_commits=max_commits)
+    md = report.to_markdown()
+    print(md)
+
+    if output_md:
+        m_path = Path(output_md)
+        m_path.parent.mkdir(parents=True, exist_ok=True)
+        m_path.write_text(md + "\n", encoding="utf-8", newline="\n")
+        print(f"\nWritten model benchmark Markdown to {m_path.resolve()}")
+
+    if output_json:
+        j_path = Path(output_json)
+        j_path.parent.mkdir(parents=True, exist_ok=True)
+        j_path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8", newline="\n")
+        print(f"\nWritten model benchmark JSON to {j_path.resolve()}")
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cordis: Adversarial AI-PR Prosecutor CLI")
     sub = parser.add_subparsers(dest="command")
@@ -966,7 +1150,69 @@ def main() -> int:
     install_p.add_argument("--repo-dir", default=".", help="Repository root directory (default: .)")
     install_p.add_argument("--targets", nargs="+", default=["git", "claude"], help="Targets to install hooks for (default: git claude)")
 
+    init_skill_p = sub.add_parser("init-skill", help="Compile and synchronize cross-harness skill manifests and audit security risks")
+    init_skill_p.add_argument("--repo", default=".", help="Path to repository root (default: .)")
+    init_skill_p.add_argument("--audit", action="store_true", help="Audit skill manifests and agent rules for security vulnerabilities")
+
+    memory_inject_p = sub.add_parser("memory-inject", help="Query episodic memory for pre-edit gate failure warnings")
+    memory_inject_p.add_argument("--file", required=True, help="Target file path")
+    memory_inject_p.add_argument("--func", required=True, help="Target function name")
+    memory_inject_p.add_argument("--db", default=".cordis_memory.db", help="Path to SQLite episodic memory database (default: .cordis_memory.db)")
+    memory_inject_p.add_argument("--top-k", type=int, default=3, help="Maximum number of failure memories to retrieve (default: 3)")
+
+    verify_patch_p = sub.add_parser("verify-patch", help="Verify collateral AST integrity of patch between old and new files")
+    verify_patch_p.add_argument("--old", required=True, help="Path to old source file")
+    verify_patch_p.add_argument("--new", required=True, help="Path to new source file")
+    verify_patch_p.add_argument("--intended-func", nargs="*", default=[], help="Names of functions authorized to change")
+    verify_patch_p.add_argument("--file-path", default="module.py", help="Logical file path for AST anchoring (default: module.py)")
+    verify_patch_p.add_argument("--json", dest="output_json", default=None, help="Path to write structured JSON report")
+
+    verify_outbox_p = sub.add_parser("verify-outbox", help="Verify worker outbox diff against base ref and emit signed merge receipt")
+    verify_outbox_p.add_argument("--base-ref", default="HEAD~1", help="Base git commit ref (default: HEAD~1)")
+    verify_outbox_p.add_argument("--intended-func", nargs="*", default=None, help="Names of functions authorized to change")
+    verify_outbox_p.add_argument("--repo-dir", default=".", help="Repository root directory (default: .)")
+    verify_outbox_p.add_argument("--output-receipt", default=None, help="Path to write text receipt file")
+    verify_outbox_p.add_argument("--json", dest="output_json", default=None, help="Path to write structured JSON receipt")
+
+    benchmark_models_p = sub.add_parser("benchmark-models", help="Benchmark commit history and compute CapCode Deception Scores")
+    benchmark_models_p.add_argument("--max-commits", type=int, default=50, help="Maximum number of commits to scan (default: 50)")
+    benchmark_models_p.add_argument("--repo-dir", default=".", help="Repository root directory (default: .)")
+    benchmark_models_p.add_argument("--output-md", default=None, help="Path to write Markdown leaderboard report")
+    benchmark_models_p.add_argument("--json", dest="output_json", default=None, help="Path to write structured JSON report")
+
     args = parser.parse_args()
+    if args.command == "init-skill":
+        return run_init_skill_cli(repo_dir=args.repo, audit=args.audit)
+    if args.command == "memory-inject":
+        return run_memory_inject_cli(
+            file_path=args.file,
+            function_name=args.func,
+            db_path=args.db,
+            top_k=args.top_k,
+        )
+    if args.command == "verify-patch":
+        return run_verify_patch_cli(
+            old_path=args.old,
+            new_path=args.new,
+            intended_functions=args.intended_func,
+            file_path=args.file_path,
+            output_json=args.output_json,
+        )
+    if args.command == "verify-outbox":
+        return run_verify_outbox_cli(
+            repo_dir=args.repo_dir,
+            base_ref=args.base_ref,
+            intended_functions=args.intended_func,
+            output_receipt=args.output_receipt,
+            output_json=args.output_json,
+        )
+    if args.command == "benchmark-models":
+        return run_benchmark_models_cli(
+            repo_dir=args.repo_dir,
+            max_commits=args.max_commits,
+            output_md=args.output_md,
+            output_json=args.output_json,
+        )
     if args.command == "benchmark":
         return run_benchmark_cli(output_md=args.output_md)
     if args.command == "benchmark-repos":

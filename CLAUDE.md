@@ -20,6 +20,7 @@ Cordis inspects code changes using a multi-gate adversarial pipeline designed to
           │                  │                  │                 │
     ast_gate.py         mutator.py          fuzzer.py         hooks.py
     ts_gate.py          repair.py        forge_guard.py    policy_guard.py
+ polyglot_gate.py    stream_gate.py
 ```
 
 ### Module Responsibilities
@@ -28,6 +29,8 @@ Cordis inspects code changes using a multi-gate adversarial pipeline designed to
 | :--- | :--- |
 | `cordis/ast_gate.py` | **Gate 1**: Analyzes Python ASTs to detect assertion tampering, tautological tests (`assert True`, `assert x == x`, `assert res is not None`), and computes Mock-to-Assertion Ratio (MAR). |
 | `cordis/ts_gate.py` | **TypeScript Gate**: Lexical AST masking, function anchor indexing (BLAKE2b 16-hex), and relational/boolean mutant synthesis for TS/JS files. |
+| `cordis/polyglot_gate.py` | **Polyglot Gate (Go & Rust)**: Lexical AST masking, 64-bit BLAKE2b function/method anchors, Go test tampering (`t.Skip`, table shrinking), Rust panic audits (`.unwrap()`, `.expect()`, `#[ignore]`), and diff-scoped mutant synthesis. |
+| `cordis/stream_gate.py` | **Stream & Sandbox Gate**: Transport stream lifecycle spy (`StreamLifecycleSpy`) verifying connection close/release, and ephemeral SQLite savepoint isolation (`EphemeralSQLiteSandbox`). |
 | `cordis/mutator.py` | **Gate 2**: In-memory and disk-based AST mutation engine. Injects boundary flips, constant corruptions, and canary mutations; runs test cycles to measure kill rate. |
 | `cordis/repair.py` | **Automated Test Synthesis**: Analyzes surviving mutants, discovers differentiating inputs via candidate generation, and synthesizes concrete unit tests to achieve 100% kill rate. |
 | `cordis/fuzzer.py` | **Gate 3**: Differential invariant fuzzer. Harvests `co_consts` and AST constants to expose magic number overfits, boundary slips, and type coercion bugs. |
@@ -52,7 +55,7 @@ uv pip install -e ".[dev]"
 
 ### Running the Test Suite
 ```powershell
-# Run the complete test suite (171 tests across all units and stress suites)
+# Run the complete test suite (324+ tests across all units and stress suites)
 python -m unittest discover -s tests -v
 
 # Or run via pytest
@@ -117,3 +120,11 @@ git tag v0.3.0
 git push origin v0.3.0
 ```
 This triggers the `Publish cordis-verify to PyPI` workflow, builds the wheel, generates release notes, and uploads the package to PyPI using the repository secret `PYPI_API_TOKEN`.
+
+<!-- CORDIS-PROSECUTOR:START -->
+## 🛡️ Cordis Adversarial Invariant Prosecution Guard
+All coding agents operating in this repository must comply with Cordis invariant verification:
+1. **Pre-Commit Verification**: Run `python -m cordis.cli verify-git` on all modified files.
+2. **Zero Surviving Mutants**: If Gate 2 reports surviving mutants, synthesize strong invariant tests using `python -m cordis.cli probe --source <src> --test <test> --func <fn> --suggest-test`.
+3. **Strict Assertion Quality**: Never weaken assertions to `is not None`, never mock internal domain logic, and never swallow exceptions via broad `except Exception: pass`.
+<!-- CORDIS-PROSECUTOR:END -->
